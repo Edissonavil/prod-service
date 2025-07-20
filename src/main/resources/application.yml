@@ -37,12 +37,11 @@ jwt:
 
 # URLs de comunicación con otros microservicios (¡usando dominios internos de Railway!)
 file-service:
-  base-url: ${FILE_SERVICE_BASE_URL:http://file-service.railway.internal:8084} # Dominio interno de Railway
+  base-url: ${FILE_SERVICE_BASE_URL:http://file-service.railway.internal} # Dominio interno de Railway
                                                                               # Ajusta 'file-service' al nombre exacto de tu servicio en Railway
-
 users:
   service:
-    url: ${USERS_SERVICE_URL:http://users-service.railway.internal:8081/api/users} # Dominio interno de Railway
+    url: ${USERS_SERVICE_URL:http://users-service.railway.internal/api/users} # Dominio interno de Railway
                                                                                  # Ajusta 'users-service' al nombre exacto de tu servicio en Railway
 
 # Configuración del directorio de subida de archivos (¡Importante para Railway!)
