@@ -1,0 +1,56 @@
+spring:
+  application:
+    name: aec-prod # Nombre de la aplicación, generalmente se usa el nombre del servicio
+  docker:
+    compose:
+      enabled: false # Deshabilita la integración con Docker Compose
+  cloud:
+    compatibility-verifier:
+      enabled: false # Deshabilita el verificador de compatibilidad de Spring Cloud
+  servlet:
+    multipart:
+      max-file-size: 1000MB # Tamaño máximo de archivo para subidas
+      max-request-size: 1000MB # Tamaño máximo de la solicitud para subidas
+
+  # Configuración de la base de datos
+  datasource:
+    # Usamos las variables específicas de PostgreSQL que Railway inyecta directamente
+    url: jdbc:postgresql://${PGHOST}:${PGPORT}/${PGDATABASE}
+    username: ${PGUSER}
+    password: ${PGPASSWORD}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: ${DDL_AUTO:update} # 'update' es un buen valor por defecto para desarrollo.
+                                    # ¡Asegúrate de usar 'validate' o 'none' en producción en Railway!
+    show-sql: true # Útil para depuración, pero considera 'false' en producción
+    properties:
+      hibernate.dialect: org.hibernate.dialect.PostgreSQLDialect # Siempre especifica el dialecto
+
+server:
+  port: ${SERVER_PORT:8083} # Puerto por defecto para desarrollo, Railway usará su propio puerto
+
+jwt:
+  secret: ${JWT_SECRET} # ¡CRÍTICO! SIN valor por defecto para seguridad
+  accessMs: ${JWT_ACCESS_MS:3600000} # Las duraciones pueden tener valores por defecto
+  refreshMs: ${JWT_REFRESH_MS:86400000} # Las duraciones pueden tener valores por defecto
+
+# URLs de comunicación con otros microservicios (¡usando dominios internos de Railway!)
+file-service:
+  base-url: ${FILE_SERVICE_BASE_URL:http://file-service.railway.internal:8084} # Dominio interno de Railway
+                                                                              # Ajusta 'file-service' al nombre exacto de tu servicio en Railway
+
+users:
+  service:
+    url: ${USERS_SERVICE_URL:http://users-service.railway.internal:8081/api/users} # Dominio interno de Railway
+                                                                                 # Ajusta 'users-service' al nombre exacto de tu servicio en Railway
+
+# Configuración del directorio de subida de archivos (¡Importante para Railway!)
+file:
+  upload-dir: ${UPLOAD_DIR:/app/uploads} # Ruta de directorio genérica dentro del contenedor de Railway
+                                          # Para persistencia real, considera los volúmenes persistentes de Railway
+
+logging:
+  level:
+    org.springframework.security: DEBUG
+    org.springframework.web.filter.CommonsRequestLoggingFilter: DEBUG

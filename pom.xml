@@ -19,7 +19,7 @@
 
     <properties>
         <java.version>17</java.version> <!-- Ajusta esta versión si usas otra de Java -->
-        <jjwt.version>0.12.5</jjwt.version> <!-- Versión unificada y más reciente de JWT -->
+        <jjwt.version>0.11.5</jjwt.version> <!-- Versión unificada y más reciente de JWT -->
         <postgresql.version>42.7.3</postgresql.version> <!-- Versión actualizada de PostgreSQL -->
         <commons-io.version>2.16.1</commons-io.version> <!-- Versión actualizada de Commons IO -->
         <spring-cloud.version>2023.0.2</spring-cloud.version> <!-- Versión de Spring Cloud -->
