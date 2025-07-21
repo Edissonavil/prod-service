@@ -12,7 +12,6 @@ com/aec/prodsrv/config/AppConfig.class
 com/aec/prodsrv/dto/StoredFileDto.class
 com/aec/prodsrv/security/JwtAuthenticationFilter.class
 com/aec/prodsrv/model/Category.class
-com/aec/prodsrv/client/FileClient$2.class
 com/aec/prodsrv/dto/AdminDecisionDto.class
 com/aec/prodsrv/ProdServiceApplication.class
 com/aec/prodsrv/model/Product.class
