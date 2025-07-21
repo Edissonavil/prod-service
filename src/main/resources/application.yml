@@ -28,7 +28,7 @@ spring:
       hibernate.dialect: org.hibernate.dialect.PostgreSQLDialect # Siempre especifica el dialecto
 
 server:
-  port: ${SERVER_PORT:8083} # Puerto por defecto para desarrollo, Railway usará su propio puerto
+  port: ${SERVER_PORT:8080} # Puerto por defecto para desarrollo, Railway usará su propio puerto
 
 jwt:
   secret: ${JWT_SECRET} # ¡CRÍTICO! SIN valor por defecto para seguridad
