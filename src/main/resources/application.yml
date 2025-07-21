@@ -29,7 +29,6 @@ spring:
 
 server:
   port: ${PORT:8080}
-  address: 0.0.0.0
 
 jwt:
   secret: ${JWT_SECRET} # ¡CRÍTICO! SIN valor por defecto para seguridad
@@ -54,11 +53,3 @@ logging:
   level:
     org.springframework.security: DEBUG
     org.springframework.web.filter.CommonsRequestLoggingFilter: DEBUG
-
-eureka:
-  client:
-    service-url:
-      defaultZone: http://eureka-server:8761/eureka 
-  instance:
-    prefer-ip-address: true  
-    instance-id: ${spring.application.name}:${random.value} 
