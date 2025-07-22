@@ -1,6 +1,5 @@
 package com.aec.prodsrv.security;
 
-import com.aec.prodsrv.security.CustomUserDetailsService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -42,11 +41,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     userDetails.getAuthorities()
                 );
 
-                // --- CORRECTED KEY CHANGE HERE: Extend WebAuthenticationDetails ---
                 WebAuthenticationDetails webDetails = new WebAuthenticationDetailsSource().buildDetails(request);
 
-                // Create a custom WebAuthenticationDetails that includes the JWT token
-                // This is the cleanest way to extend the details object.
                 CustomWebAuthenticationDetails customDetails = new CustomWebAuthenticationDetails(webDetails.getRemoteAddress(), webDetails.getSessionId(), token);
 
                 auth.setDetails(customDetails); // Set our custom details object

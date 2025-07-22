@@ -1,7 +1,6 @@
 // src/main/java/com/aec/prodsrv/security/CustomUserDetailsService.java
 package com.aec.prodsrv.security;
 
-import com.aec.prodsrv.config.AppConfig;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.GrantedAuthority;
@@ -14,21 +13,12 @@ import org.springframework.web.client.RestTemplate;
 import java.util.*;
 import java.util.stream.Collectors;
 
-/**
- * Carga los detalles del usuario (y sus roles) desde el microservicio users-service.
- */
 @Service
 @RequiredArgsConstructor
 public class CustomUserDetailsService implements UserDetailsService {
 
     private final RestTemplate restTemplate;
-    private final JwtUtils jwtUtils;
 
-    /**
-     * URL base de tu users-service, p.ej. http://localhost:8081 
-     * o bien podrías usar Eureka/Consul:
-     *   @Value("${users.service.url}") 
-     */
     @Value("${users.service.url}")
     private String usersServiceUrl;
 
@@ -44,15 +34,13 @@ public class CustomUserDetailsService implements UserDetailsService {
         if (user == null) {
             throw new UsernameNotFoundException("Usuario no encontrado: " + username);
         }
-        // Convertir roles (ej. ["ROL_ADMIN","ROL_COLABORADOR"]) a GrantedAuthority
         List<GrantedAuthority> authorities = user.getRoles().stream()
             .map(SimpleGrantedAuthority::new)
             .collect(Collectors.toList());
 
-        // El password no se usa al validar el JWT, pero Spring Security lo exige:
         return User.builder()
                    .username(user.getUsername())
-                   .password("")        // vacío, porque no usamos form-login aquí
+                   .password("")      
                    .authorities(authorities)
                    .accountExpired(false)
                    .accountLocked(false)
@@ -67,8 +55,6 @@ public class CustomUserDetailsService implements UserDetailsService {
     public static class UserDto {
         private String username;
         private List<String> roles;
-        // getters y setters (o usa Lombok @Data)
-
         public String getUsername() { return username; }
         public void setUsername(String username) { this.username = username; }
         public List<String> getRoles() { return roles; }

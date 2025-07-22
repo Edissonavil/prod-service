@@ -17,7 +17,8 @@ public class AppConfig {
     @Bean
     public WebClient webClient(
         WebClient.Builder builder,
-        @Value("${filesrv.url:http://localhost:8084}") String baseUrl  // <-- fallback
+        @Value("${filesrv.url:\"https://aecf-production.up.railway.app\",\n" + //
+                        "      \"https://aecblock.com\"}") String baseUrl  // <-- fallback
         ) {
         return builder
             .baseUrl(baseUrl)                       // ya es un String, no "${…}"
