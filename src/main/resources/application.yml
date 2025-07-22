@@ -51,7 +51,7 @@ file:
 
 logging:
   level:
-    root: TRACE 
-    org.springframework.web: TRACE 
-    org.hibernate: TRACE 
-    com.aec.prodsrv: TRACE 
+    root: DEBUG
+    org.springframework.web: DEBUG
+    org.hibernate: DEBUG
+    com.aec.prodsrv: DEBUG
