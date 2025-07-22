@@ -51,8 +51,6 @@ file:
 
 logging:
   level:
-   logging:
-  level:
     root: TRACE 
     org.springframework.web: TRACE 
     org.hibernate: TRACE 
