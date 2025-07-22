@@ -2,6 +2,7 @@ package com.aec.prodsrv.controller;
 
 import com.aec.prodsrv.dto.AdminDecisionDto;
 import com.aec.prodsrv.dto.ProductDto;
+import com.aec.prodsrv.model.Product;
 import com.aec.prodsrv.model.ProductStatus;
 import com.aec.prodsrv.service.ProductService;
 
@@ -59,7 +60,7 @@ public class ProductController {
         return ResponseEntity.noContent().build();
     }
 
-    @GetMapping("/my-products")
+   /*  @GetMapping("/my-products")
     @PreAuthorize("hasAuthority('ROL_COLABORADOR')")
     public Page<ProductDto> myProducts(
             @RequestParam(defaultValue = "0") int page,
@@ -67,7 +68,16 @@ public class ProductController {
             @AuthenticationPrincipal Jwt jwt) {
         Pageable pg = PageRequest.of(page, size);
         return svc.findByUploaderId(jwt.getSubject(), pg);
-    }
+    }*/
+
+    @GetMapping("/my-products")
+public ResponseEntity<List<Product>> getMyProducts() {
+    List<Product> testProducts = List.of(
+        new Product(1L, "Producto prueba 1", "Descripción 1", 10.0, null, null, null, null, null, null, null, null, null),
+        new Product(2L, "Producto prueba 2", "Descripción 2", 20.0, null, null, null, null, null, null, null, null, null)
+    );
+    return ResponseEntity.ok(testProducts);
+}
 
     @GetMapping
     public Page<ProductDto> all(
