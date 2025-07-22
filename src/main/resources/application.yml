@@ -39,7 +39,7 @@ jwt:
 file-service:
   base-url: ${FILE_SERVICE_BASE_URL:http://file-service.railway.internal} # Dominio interno de Railway
                                                                               # Ajusta 'file-service' al nombre exacto de tu servicio en Railway
-user:
+users:
   service:
     url: ${USERS_SERVICE_URL:http://users-service.railway.internal/api/users} # Dominio interno de Railway
                                                                                  # Ajusta 'users-service' al nombre exacto de tu servicio en Railway
