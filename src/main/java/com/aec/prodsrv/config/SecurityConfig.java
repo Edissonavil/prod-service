@@ -31,8 +31,7 @@ public class SecurityConfig {
     return NimbusJwtDecoder.withSecretKey(key).build();
   }
 
-  /** Convierte el claim `role` en GrantedAuthority sin prefijo */
-  @Bean // Asegúrate de que este sea un @Bean si lo usas en otros lugares
+  @Bean 
   public JwtAuthenticationConverter jwtAuthenticationConverter() { // Cambiado a public si lo necesitas como bean
     JwtGrantedAuthoritiesConverter ga = new JwtGrantedAuthoritiesConverter();
     ga.setAuthorityPrefix("");          // no “SCOPE_”
