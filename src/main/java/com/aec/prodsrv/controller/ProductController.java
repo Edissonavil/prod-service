@@ -8,6 +8,9 @@ import com.aec.prodsrv.service.ProductService;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.*;
 import org.springframework.http.*;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -23,6 +26,7 @@ import java.util.List;
 @RequestMapping("/api/products")
 @RequiredArgsConstructor
 public class ProductController {
+        private static final Logger log = LoggerFactory.getLogger(ProductController.class); 
 
     private final ProductService svc;
 
@@ -60,15 +64,28 @@ public class ProductController {
         return ResponseEntity.noContent().build();
     }
 
-    @GetMapping("/my-products")
+
+    @GetMapping("/my-products") // La ruta real que el servicio recibe después de StripPrefix
     @PreAuthorize("hasAuthority('ROL_COLABORADOR')")
     public Page<ProductDto> myProducts(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size,
             @AuthenticationPrincipal Jwt jwt) {
+
+        log.info(">>>>>> ProdService: Recibida solicitud GET /my-products. Subject JWT: {}", jwt.getSubject()); // ¡Añade esta línea!
+
         Pageable pg = PageRequest.of(page, size);
-        return svc.findByUploaderId(jwt.getSubject(), pg);
+        Page<ProductDto> result = svc.findByUploaderId(jwt.getSubject(), pg);
+
+        if (result.isEmpty()) {
+            log.warn(">>>>>> ProdService: findByUploaderId devolvió una página vacía para el subject {}", jwt.getSubject());
+        } else {
+            log.info(">>>>>> ProdService: findByUploaderId encontró {} elementos.", result.getTotalElements());
+        }
+
+        return result; // Asegúrate de que estás devolviendo el resultado aquí
     }
+
 
     @GetMapping
     public Page<ProductDto> all(
