@@ -185,15 +185,16 @@ public ProductDto getById(Long id) {
                       .orElseGet(() -> catRepo.save(Category.builder().nombre(nombre).build()));
     }
 
-    private ProductDto toDto(Product p){
+       private ProductDto toDto(Product p) {
         String fotoUrl = (p.getFotografiaProd() != null)
             ? fileServiceBaseUrl + "/api/files/" + p.getIdProducto() + "/" + p.getFotografiaProd()
             : null;
-        List<String> autUrls = (p.getArchivosAut()!=null)
+
+        List<String> autUrls = (p.getArchivosAut() != null)
             ? p.getArchivosAut().stream()
                 .map(fn -> fileServiceBaseUrl + "/api/files/" + p.getIdProducto() + "/" + fn)
                 .toList()
-            : List.of();
+            : Collections.emptyList();
 
         return ProductDto.builder()
                 .idProducto(p.getIdProducto())
