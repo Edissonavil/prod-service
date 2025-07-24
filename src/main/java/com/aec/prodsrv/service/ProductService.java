@@ -1,6 +1,7 @@
 package com.aec.prodsrv.service;
 
 import com.aec.prodsrv.client.FileClient;
+import com.aec.prodsrv.client.FileClient.UploadFileResponse;
 import com.aec.prodsrv.dto.ProductDto;
 import com.aec.prodsrv.model.*;
 import com.aec.prodsrv.repository.*;
@@ -74,33 +75,42 @@ public class ProductService {
         // foto
         if (foto != null && !foto.isEmpty()) {
             try {
-                Map<String,Object> res = fileClient.uploadProductFile(foto, uploader, productId);
-                saved.setFotografiaProd((String)res.get("filename"));
+                // ✅ Obtener UploadFileResponse
+                UploadFileResponse res = fileClient.uploadProductFile(foto, uploader, productId);
+                // ✅ Guardar el googleDriveFileId en fotografiaProd
+                saved.setFotografiaProd(res.googleDriveFileId());
             } catch (Exception e) {
                 log.error("Error subiendo foto para producto {}: {}", productId, e.getMessage());
+                // Considera relanzar o manejar más robustamente
             }
         }
 
         // archivos autorizados
         if (archivosAut != null) {
-            List<String> filenames = new ArrayList<>();
+            List<String> googleDriveFileIds = new ArrayList<>(); // ✅ Cambiado a almacenar IDs
             for (MultipartFile mf : archivosAut) {
                 if (!mf.isEmpty()) {
                     try {
-                        Map<String,Object> res = fileClient.uploadProductFile(mf, uploader, productId);
-                        filenames.add((String)res.get("filename"));
+                        // ✅ Obtener UploadFileResponse
+                        UploadFileResponse res = fileClient.uploadProductFile(mf, uploader, productId);
+                        // ✅ Guardar el googleDriveFileId
+                        googleDriveFileIds.add(res.googleDriveFileId());
                     } catch (Exception e) {
                         log.error("Error subiendo archivo {}: {}", mf.getOriginalFilename(), e.getMessage());
+                        // Considera relanzar o manejar más robustamente
                     }
                 }
             }
-            saved.setArchivosAut(filenames);
+            // ✅ Asignar la lista de Google Drive IDs
+            saved.setArchivosAut(googleDriveFileIds);
         }
 
+        // Guarda el producto nuevamente con los IDs de archivos actualizados
         return toDto(repo.save(saved));
     }
 
-    public ProductDto update(Long id,
+
+ public ProductDto update(Long id,
                              ProductDto dto,
                              MultipartFile foto,
                              List<MultipartFile> archivosAut,
@@ -112,26 +122,51 @@ public class ProductService {
             throw new SecurityException("Sin permiso");
         }
 
-        // foto
         if (foto != null) {
             if (!foto.isEmpty()) {
-                Map<String,Object> res = fileClient.uploadProductFile(foto, uploader, id);
-                p.setFotografiaProd((String)res.get("filename"));
-            } else {
-                p.setFotografiaProd(null);
+                // ✅ Borrar la foto anterior si existe antes de subir la nueva
+                if (p.getFotografiaProd() != null) {
+                    try {
+                        fileClient.deleteFile(p.getFotografiaProd()); // ✅ Borrar la foto antigua de GD
+                    } catch (Exception e) {
+                        log.warn("No se pudo eliminar la foto anterior {} para producto {}: {}", p.getFotografiaProd(), id, e.getMessage());
+                    }
+                }
+                UploadFileResponse res = fileClient.uploadProductFile(foto, uploader, id);
+                p.setFotografiaProd(res.googleDriveFileId());
+            } else { // Si el MultipartFile se envió pero estaba vacío, asumimos que se quiere borrar
+                if (p.getFotografiaProd() != null) {
+                    try {
+                        fileClient.deleteFile(p.getFotografiaProd()); // ✅ Borrar la foto antigua de GD
+                    } catch (Exception e) {
+                        log.warn("No se pudo eliminar la foto vacía para producto {}: {}", id, e.getMessage());
+                    }
+                }
+                p.setFotografiaProd(null); // Eliminar referencia en DB
             }
         }
 
         // archivos autorizados
-        if (archivosAut != null) {
-            List<String> filenames = new ArrayList<>();
-            for (MultipartFile mf : archivosAut) {
-                if (!mf.isEmpty()) {
-                    Map<String,Object> res = fileClient.uploadProductFile(mf, uploader, id);
-                    filenames.add((String)res.get("filename"));
+        if (archivosAut != null) { // Si el cliente envía `archivosAut` (incluso vacío)
+            // Primero, eliminar los archivos antiguos de Google Drive
+            if (p.getArchivosAut() != null) {
+                for (String oldFileId : p.getArchivosAut()) {
+                    try {
+                        fileClient.deleteFile(oldFileId); // ✅ Borrar archivos antiguos de GD
+                    } catch (Exception e) {
+                        log.warn("No se pudo eliminar el archivo antiguo {} para producto {}: {}", oldFileId, id, e.getMessage());
+                    }
                 }
             }
-            p.setArchivosAut(filenames);
+
+            List<String> newGoogleDriveFileIds = new ArrayList<>(); // ✅ Almacenar nuevos IDs
+            for (MultipartFile mf : archivosAut) {
+                if (!mf.isEmpty()) {
+                    UploadFileResponse res = fileClient.uploadProductFile(mf, uploader, id);
+                    newGoogleDriveFileIds.add(res.googleDriveFileId());
+                }
+            }
+            p.setArchivosAut(newGoogleDriveFileIds); // ✅ Asignar la nueva lista de IDs
         }
 
         // resto de campos
@@ -148,7 +183,6 @@ public class ProductService {
 
         return toDto(repo.save(p));
     }
-
 
     public void deleteProduct(Long id, String uploader) {
         Product p = repo.findById(id)
@@ -182,17 +216,25 @@ public ProductDto getById(Long id) {
 
     private Category resolveOrCreateCategory(String nombre){
         return catRepo.findByNombreIgnoreCase(nombre)
-                      .orElseGet(() -> catRepo.save(Category.builder().nombre(nombre).build()));
+                
+        .orElseGet(() -> catRepo.save(Category.builder().nombre(nombre).build()));
     }
 
-       private ProductDto toDto(Product p) {
+    public List<ProductDto> findByUploaderUsername(String uploader) {
+    return repo.findByUploaderUsername(uploader)
+               .stream()
+               .map(this::toDto)
+               .toList();
+}
+
+  private ProductDto toDto(Product p) {
         String fotoUrl = (p.getFotografiaProd() != null)
-            ? fileServiceBaseUrl + "/api/files/" + p.getIdProducto() + "/" + p.getFotografiaProd()
+            ? fileServiceBaseUrl + "/api/files/download/" + p.getFotografiaProd() // ✅ URL de descarga de Google Drive
             : null;
 
         List<String> autUrls = (p.getArchivosAut() != null)
             ? p.getArchivosAut().stream()
-                .map(fn -> fileServiceBaseUrl + "/api/files/" + p.getIdProducto() + "/" + fn)
+                .map(googleDriveFileId -> fileServiceBaseUrl + "/api/files/download/" + googleDriveFileId) // ✅ URL de descarga de Google Drive
                 .toList()
             : Collections.emptyList();
 
@@ -201,9 +243,9 @@ public ProductDto getById(Long id) {
                 .nombre(p.getNombre())
                 .descripcionProd(p.getDescripcionProd())
                 .precioIndividual(p.getPrecioIndividual())
-                .fotografiaProd(p.getFotografiaProd())
+                .fotografiaProd(p.getFotografiaProd()) // Sigue siendo el ID de Google Drive
                 .fotografiaUrl(fotoUrl)
-                .archivosAut(p.getArchivosAut())
+                .archivosAut(p.getArchivosAut()) // Sigue siendo la lista de IDs de Google Drive
                 .archivosAutUrls(autUrls)
                 .estado(p.getEstado().name())
                 .categorias(p.getCategorias().stream().map(Category::getNombre).toList())
@@ -214,12 +256,5 @@ public ProductDto getById(Long id) {
                 .comentario(p.getComentario())
                 .build();
     }
-
-    public List<ProductDto> findByUploaderUsername(String uploader) {
-    return repo.findByUploaderUsername(uploader)
-               .stream()
-               .map(this::toDto)
-               .toList();
-}
 
 }

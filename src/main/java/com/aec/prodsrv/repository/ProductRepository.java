@@ -15,7 +15,7 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
     // Listar productos por uploader
     Page<Product> findByUploaderUsername(String uploaderUsername, Pageable pg);
     Page<Product> findByEstado(ProductStatus estado, Pageable pg);
-    List<Product> findByUploaderUsername(String uploaderUsername);
+    List<Product> findByUploaderUsername(String uploader);
 }
 
 
