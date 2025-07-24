@@ -42,7 +42,7 @@ public class ProductService {
 
     public ProductDto decidir(Long id, boolean aprobar, String comentario, String adminUsername) {
         Product p = repo.findById(id)
-                        .orElseThrow(() -> new EntityNotFoundException("Producto no encontrado: " + id));
+                .orElseThrow(() -> new EntityNotFoundException("Producto no encontrado: " + id));
         p.setEstado(aprobar ? ProductStatus.APROBADO : ProductStatus.RECHAZADO);
         p.setUsuarioDecision(adminUsername);
         p.setComentario(comentario);
@@ -50,11 +50,11 @@ public class ProductService {
     }
 
     public ProductDto create(ProductDto dto,
-                             MultipartFile foto,
-                             List<MultipartFile> archivosAut,
-                             String uploader) {
+            MultipartFile foto,
+            List<MultipartFile> archivosAut,
+            String uploader) {
 
-        Set<Category> cats  = namesToCategorySet(dto.getCategorias());
+        Set<Category> cats = namesToCategorySet(dto.getCategorias());
         Set<Category> specs = namesToCategorySet(dto.getEspecialidades());
 
         Product p = Product.builder()
@@ -109,15 +109,14 @@ public class ProductService {
         return toDto(repo.save(saved));
     }
 
-
- public ProductDto update(Long id,
-                             ProductDto dto,
-                             MultipartFile foto,
-                             List<MultipartFile> archivosAut,
-                             String uploader) {
+    public ProductDto update(Long id,
+            ProductDto dto,
+            MultipartFile foto,
+            List<MultipartFile> archivosAut,
+            String uploader) {
 
         Product p = repo.findById(id)
-                        .orElseThrow(() -> new EntityNotFoundException("Producto no encontrado: " + id));
+                .orElseThrow(() -> new EntityNotFoundException("Producto no encontrado: " + id));
         if (!p.getUploaderUsername().equals(uploader)) {
             throw new SecurityException("Sin permiso");
         }
@@ -129,7 +128,8 @@ public class ProductService {
                     try {
                         fileClient.deleteFile(p.getFotografiaProd()); // ✅ Borrar la foto antigua de GD
                     } catch (Exception e) {
-                        log.warn("No se pudo eliminar la foto anterior {} para producto {}: {}", p.getFotografiaProd(), id, e.getMessage());
+                        log.warn("No se pudo eliminar la foto anterior {} para producto {}: {}", p.getFotografiaProd(),
+                                id, e.getMessage());
                     }
                 }
                 UploadFileResponse res = fileClient.uploadProductFile(foto, uploader, id);
@@ -154,7 +154,8 @@ public class ProductService {
                     try {
                         fileClient.deleteFile(oldFileId); // ✅ Borrar archivos antiguos de GD
                     } catch (Exception e) {
-                        log.warn("No se pudo eliminar el archivo antiguo {} para producto {}: {}", oldFileId, id, e.getMessage());
+                        log.warn("No se pudo eliminar el archivo antiguo {} para producto {}: {}", oldFileId, id,
+                                e.getMessage());
                     }
                 }
             }
@@ -186,57 +187,71 @@ public class ProductService {
 
     public void deleteProduct(Long id, String uploader) {
         Product p = repo.findById(id)
-                        .orElseThrow(() -> new EntityNotFoundException("Producto no encontrado"));
+                .orElseThrow(() -> new EntityNotFoundException("Producto no encontrado"));
         if (!p.getUploaderUsername().equals(uploader))
             throw new SecurityException("No autorizado");
         repo.delete(p);
     }
 
-    public Page<ProductDto> findAll(Pageable pg)       { return repo.findAll(pg).map(this::toDto); }
-    public Page<ProductDto> findByEstado(ProductStatus e, Pageable pg){ return repo.findByEstado(e, pg).map(this::toDto); }
-    public Page<ProductDto> findByUploaderId(String u, Pageable pg){ return repo.findByUploaderUsername(u, pg).map(this::toDto); }
-@Transactional(readOnly = true)
-public ProductDto getById(Long id) {
-    return toDto(
-      repo.findById(id)
-          .orElseThrow(() ->
-            new ResponseStatusException(
-              HttpStatus.NOT_FOUND,
-              "Producto con ID " + id + " no existe"
-            )
-          )
-    );
-}
-    private Set<Category> namesToCategorySet(List<String> names){
-        if (names == null) return Collections.emptySet();
-        return names.stream()
-                    .map(this::resolveOrCreateCategory)
-                    .collect(Collectors.toSet());
+    public Page<ProductDto> findAll(Pageable pg) {
+        return repo.findAll(pg).map(this::toDto);
     }
 
-    private Category resolveOrCreateCategory(String nombre){
+    public Page<ProductDto> findByEstado(ProductStatus e, Pageable pg) {
+        return repo.findByEstado(e, pg).map(this::toDto);
+    }
+
+    public Page<ProductDto> findByUploaderId(String u, Pageable pg) {
+        return repo.findByUploaderUsername(u, pg).map(this::toDto);
+    }
+
+    @Transactional(readOnly = true)
+    public ProductDto getById(Long id) {
+        return toDto(
+                repo.findById(id)
+                        .orElseThrow(() -> new ResponseStatusException(
+                                HttpStatus.NOT_FOUND,
+                                "Producto con ID " + id + " no existe")));
+    }
+
+    private Set<Category> namesToCategorySet(List<String> names) {
+        if (names == null)
+            return Collections.emptySet();
+        return names.stream()
+                .map(this::resolveOrCreateCategory)
+                .collect(Collectors.toSet());
+    }
+
+    private Category resolveOrCreateCategory(String nombre) {
         return catRepo.findByNombreIgnoreCase(nombre)
-                
-        .orElseGet(() -> catRepo.save(Category.builder().nombre(nombre).build()));
+
+                .orElseGet(() -> catRepo.save(Category.builder().nombre(nombre).build()));
     }
 
     public List<ProductDto> findByUploaderUsername(String uploader) {
-    return repo.findByUploaderUsername(uploader)
-               .stream()
-               .map(this::toDto)
-               .toList();
-}
+        return repo.findByUploaderUsername(uploader)
+                .stream()
+                .map(this::toDto)
+                .toList();
+    }
 
-  private ProductDto toDto(Product p) {
+    private ProductDto toDto(Product p) {
         String fotoUrl = (p.getFotografiaProd() != null)
-            ? fileServiceBaseUrl + "/api/files/download/" + p.getFotografiaProd() // ✅ URL de descarga de Google Drive
-            : null;
+                ? fileServiceBaseUrl + "/api/files/download/" + p.getFotografiaProd() // ✅ URL de descarga de Google
+                                                                                      // Drive
+                : null;
 
         List<String> autUrls = (p.getArchivosAut() != null)
-            ? p.getArchivosAut().stream()
-                .map(googleDriveFileId -> fileServiceBaseUrl + "/api/files/download/" + googleDriveFileId) // ✅ URL de descarga de Google Drive
-                .toList()
-            : Collections.emptyList();
+                ? p.getArchivosAut().stream()
+                        .map(googleDriveFileId -> fileServiceBaseUrl + "/api/files/download/" + googleDriveFileId) // ✅
+                                                                                                                   // URL
+                                                                                                                   // de
+                                                                                                                   // descarga
+                                                                                                                   // de
+                                                                                                                   // Google
+                                                                                                                   // Drive
+                        .toList()
+                : Collections.emptyList();
 
         return ProductDto.builder()
                 .idProducto(p.getIdProducto())
