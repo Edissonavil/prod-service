@@ -289,7 +289,9 @@ public class ProductService {
                 .nombre(p.getNombre())
                 .descripcionProd(p.getDescripcionProd())
                 .precioIndividual(p.getPrecioIndividual())
+                .fotografiaProd(p.getFotografiaProd())   // driveId
                 .fotografiaUrl(fotoUrl)                  // URL vía Gateway
+                .archivosAut(p.getArchivosAut())         // driveIds
                 .archivosAutUrls(autUrls)                // URLs vía Gateway
                 .estado(p.getEstado().name())
                 .categorias(p.getCategorias().stream().map(Category::getNombre).toList())

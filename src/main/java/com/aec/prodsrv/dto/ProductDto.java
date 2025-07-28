@@ -8,7 +8,6 @@ import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
 import java.util.List;
 
-// ProductDto.java
 @Data
 @Builder
 @NoArgsConstructor
@@ -18,7 +17,9 @@ public class ProductDto {
     private String nombre;
     private String descripcionProd;
     private Double precioIndividual;
+    private String fotografiaProd; 
     private String fotografiaUrl;  
+    private List<String> archivosAut; 
     private List<String> archivosAutUrls; 
     private String estado;
     private List<String> categorias;
@@ -27,4 +28,5 @@ public class ProductDto {
     private String uploaderUsername;
     private String usuarioDecision;
     private String comentario;
+
 }
