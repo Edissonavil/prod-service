@@ -27,7 +27,7 @@ import java.io.IOException;
 @Component
 public class FileClient {
 
-    private static final Logger log = LoggerFactory.getLogger(FileClient.class);
+ private static final Logger log = LoggerFactory.getLogger(FileClient.class);
 
     private final WebClient webClient;
 
@@ -38,18 +38,11 @@ public class FileClient {
 
     private String getAuthToken() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth == null) throw new IllegalStateException("No hay usuario autenticado en el SecurityContext");
-
-        if (auth.getDetails() instanceof CustomWebAuthenticationDetails c) {
-            return c.getJwtToken();
-        }
-        if (auth.getCredentials() instanceof String creds && !creds.isBlank()) {
-            return creds;
-        }
-        if (auth instanceof JwtAuthenticationToken jwtAuth) {
-            return jwtAuth.getToken().getTokenValue();
-        }
-        throw new IllegalStateException("No se encontró JWT en el SecurityContext");
+        if (auth == null) throw new IllegalStateException("No hay usuario autenticado");
+        if (auth.getDetails() instanceof CustomWebAuthenticationDetails c) return c.getJwtToken();
+        if (auth.getCredentials() instanceof String creds && !creds.isBlank()) return creds;
+        if (auth instanceof JwtAuthenticationToken jwtAuth) return jwtAuth.getToken().getTokenValue();
+        throw new IllegalStateException("No se encontró JWT");
     }
 
     public FileInfoDto uploadProductFile(MultipartFile file, String uploader, Long productId) {
@@ -90,19 +83,21 @@ public class FileClient {
 
     private Mono<FileInfoDto> handleResponse(ClientResponse resp, String uri) {
         HttpStatusCode status = resp.statusCode();
-        if (status.is2xxSuccessful()) {
-            // Log del JSON crudo para confirmar el payload
-            return resp.bodyToMono(String.class)
-                    .doOnNext(json -> log.info("FileService {} OK. JSON crudo: {}", uri, json))
-                    .flatMap(json -> resp.bodyToMono(FileInfoDto.class));
-        }
-        // Si no es 2xx, loguear cuerpo de error y fallar explícitamente
         return resp.bodyToMono(String.class)
                 .defaultIfEmpty("")
                 .flatMap(body -> {
-                    log.error("FileService {} ERROR status={}, body={}", uri, status.value(), body);
-                    return Mono.error(new IllegalStateException(
-                            "FileService respondió " + status.value() + " en " + uri));
+                    if (status.is2xxSuccessful()) {
+                        log.info("FileService {} OK. JSON crudo: {}", uri, body);
+                        try {
+                            return Mono.justOrEmpty(WebClientUtils.readAs(body, FileInfoDto.class));
+                        } catch (Exception ex) {
+                            log.error("Error deserializando respuesta de {}: {}", uri, ex.getMessage(), ex);
+                            return Mono.error(ex);
+                        }
+                    } else {
+                        log.error("FileService {} ERROR status={}, body={}", uri, status.value(), body);
+                        return Mono.error(new IllegalStateException("FileService " + uri + " -> " + status.value()));
+                    }
                 });
     }
 
