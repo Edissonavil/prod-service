@@ -36,9 +36,10 @@ jwt:
   refreshMs: ${JWT_REFRESH_MS:86400000} # Las duraciones pueden tener valores por defecto
 
 # URLs de comunicación con otros microservicios (¡usando dominios internos de Railway!)
+# prod-service application.yml
 file-service:
-  base-url: ${FILE_SERVICE_BASE_URL:http://file-service.railway.internal:8084} # Dominio interno de Railway
-                                                                              # Ajusta 'file-service' al nombre exacto de tu servicio en Railway
+  internal-base-url: ${FILE_SERVICE_BASE_URL:http://file-service.railway.internal:8084}
+  public-gateway-url: ${PUBLIC_GATEWAY_URL:https://gateway-production-129e.up.railway.app}
 users:
   service:
     url: ${USERS_SERVICE_URL:http://users-service.railway.internal/api/users:8081} # Dominio interno de Railway

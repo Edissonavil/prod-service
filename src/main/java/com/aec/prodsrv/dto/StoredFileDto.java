@@ -10,6 +10,7 @@ import lombok.NoArgsConstructor;
 public class StoredFileDto {
     private Long id;
     private String filename;
+    private String driveFileId;
     private String originalName;
     private String fileType;
     private long size;

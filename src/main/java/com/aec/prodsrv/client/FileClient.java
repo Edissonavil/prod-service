@@ -1,20 +1,16 @@
 package com.aec.prodsrv.client;
 
-import com.aec.prodsrv.dto.FileInfoResponse;
+import com.aec.prodsrv.dto.StoredFileDto;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ByteArrayResource;
-import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.MultipartBodyBuilder;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.stereotype.Component;
-import org.springframework.util.MultiValueMap;
-import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.WebClient;
-import org.springframework.http.client.MultipartBodyBuilder;
-
 import java.io.IOException;
 
 @Component
@@ -22,69 +18,61 @@ public class FileClient {
 
     private final WebClient webClient;
 
-    public FileClient(@Value("${file-service.base-url}") String baseUrl,
-                      WebClient.Builder builder) {
+    public FileClient(
+            @Value("${file-service.base-url}") String baseUrl,
+            WebClient.Builder builder
+    ) {
         this.webClient = builder.baseUrl(baseUrl).build();
     }
 
     private String getAuthToken() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null) throw new IllegalStateException("No hay usuario autenticado");
         if (auth instanceof JwtAuthenticationToken jwtAuth) {
             return jwtAuth.getToken().getTokenValue();
         }
-        throw new IllegalStateException("No JWT en SecurityContext");
+        if (auth.getCredentials() instanceof String creds && !creds.isBlank()) {
+            return creds;
+        }
+        throw new IllegalStateException("No se encontró JWT en el SecurityContext");
     }
 
-    private MultiValueMap<String, HttpEntity<?>> buildMultipart(org.springframework.web.multipart.MultipartFile file,
-                                                         String uploader) {
+    public StoredFileDto uploadProductFile(org.springframework.web.multipart.MultipartFile file,
+                                         String uploader,
+                                         Long productId) {
+        if (file.isEmpty()) return null;
+
         MultipartBodyBuilder mpb = new MultipartBodyBuilder();
         try {
             mpb.part("file", new ByteArrayResource(file.getBytes()))
                .filename(file.getOriginalFilename())
                .contentType(MediaType.parseMediaType(file.getContentType()));
         } catch (IOException e) {
-            throw new RuntimeException(e);
+            throw new RuntimeException("Error leyendo bytes del fichero: " + e.getMessage(), e);
         }
         mpb.part("uploader", uploader);
-        return mpb.build();
-    }
 
-    public FileInfoResponse uploadProductFile(org.springframework.web.multipart.MultipartFile file,
-                                              String uploader, Long productId) {
         return webClient.post()
-                .uri(uriBuilder -> uriBuilder
-                        .path("/api/files/public/{id}")
-                        .queryParam("type", "product")
-                        .build(productId))
+                .uri("/api/files/public/{entityId}?type=product", productId)
                 .contentType(MediaType.MULTIPART_FORM_DATA)
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + getAuthToken())
-                .body(BodyInserters.fromMultipartData(buildMultipart(file, uploader)))
+                .bodyValue(mpb.build())
                 .retrieve()
-                .bodyToMono(FileInfoResponse.class)
+                .bodyToMono(StoredFileDto.class)
                 .block();
     }
 
-    public FileInfoResponse uploadReceiptFile(org.springframework.web.multipart.MultipartFile file,
-                                              String uploader, Long orderId) {
-        return webClient.post()
-                .uri(uriBuilder -> uriBuilder
-                        .path("/api/files/public/{id}")
-                        .queryParam("type", "receipt")
-                        .build(orderId))
-                .contentType(MediaType.MULTIPART_FORM_DATA)
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + getAuthToken())
-                .body(BodyInserters.fromMultipartData(buildMultipart(file, uploader)))
+    public byte[] downloadFile(String driveFileId) {
+        return webClient.get()
+                .uri("/api/files/{driveFileId}", driveFileId)   // En file-service es /api/files/{driveId}
                 .retrieve()
-                .bodyToMono(FileInfoResponse.class)
+                .bodyToMono(byte[].class)
                 .block();
     }
 
-    
     public void deleteFile(String driveFileId) {
-        if (driveFileId == null || driveFileId.isBlank()) return;
-
         webClient.delete()
-                .uri("/api/files/{driveId}", driveFileId)
+                .uri("/api/files/{driveFileId}", driveFileId)
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + getAuthToken())
                 .retrieve()
                 .toBodilessEntity()
