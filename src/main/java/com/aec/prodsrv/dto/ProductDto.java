@@ -8,6 +8,7 @@ import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
 import java.util.List;
 
+// ProductDto.java
 @Data
 @Builder
 @NoArgsConstructor
@@ -17,10 +18,8 @@ public class ProductDto {
     private String nombre;
     private String descripcionProd;
     private Double precioIndividual;
-    private String fotografiaProd; // Nombre del archivo (ej. UUID.jpeg)
-    private String fotografiaUrl;  // <- Nuevo campo para la URL completa
-    private List<String> archivosAut; // Nombres de los archivos autorizados
-    private List<String> archivosAutUrls; // <- Nuevo campo para las URLs completas de los archivos autorizados
+    private String fotografiaUrl;  
+    private List<String> archivosAutUrls; 
     private String estado;
     private List<String> categorias;
     private List<String> especialidades;
@@ -28,5 +27,4 @@ public class ProductDto {
     private String uploaderUsername;
     private String usuarioDecision;
     private String comentario;
-
 }
