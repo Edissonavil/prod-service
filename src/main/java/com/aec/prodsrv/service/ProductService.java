@@ -327,33 +327,81 @@ public class ProductService {
         return repo.findByUploaderUsername(username).stream().map(this::toDto).toList();
     }
 
-private ProductDto toDto(Product p) {
-    String fotoUrl = (p.getFotografiaProd() != null)
-            ? gatewayBaseUrl + "/api/files/" + p.getIdProducto() + "/" + p.getFotografiaProd()
-            : null;
-    List<String> autUrls = (p.getArchivosAut() != null)
-            ? p.getArchivosAut().stream()
-                .map(id -> gatewayBaseUrl + "/api/files/" + p.getIdProducto() + "/" + id)
-                .toList()
-            : List.of();
+    private static final Map<String, String> MIME_TO_EXT = Map.of(
+            "application/pdf", "PDF",
+            "application/zip", "ZIP",
+            "image/jpeg", "JPG",
+            "image/png", "PNG",
+            "application/xml", "XML",
+            "text/xml", "XML");
 
-    return ProductDto.builder()
-            .idProducto(p.getIdProducto())
-            .nombre(p.getNombre())
-            .descripcionProd(p.getDescripcionProd())
-            .precioIndividual(p.getPrecioIndividual())
-            .fotografiaProd(p.getFotografiaProd())   // driveId
-            .fotografiaUrl(fotoUrl)                  // URL vía Gateway
-            .archivosAut(p.getArchivosAut())         // driveIds
-            .archivosAutUrls(autUrls)                // URLs vía Gateway
-            .estado(p.getEstado().name())
-            .categorias(p.getCategorias().stream().map(Category::getNombre).toList())
-            .especialidades(p.getEspecialidades().stream().map(Category::getNombre).toList())
-            .pais(p.getPais())
-            .uploaderUsername(p.getUploaderUsername())
-            .usuarioDecision(p.getUsuarioDecision())
-            .comentario(p.getComentario())
-            .build();
-}
+    private static String guessExt(String originalName, String mime) {
+        // 1) Prioridad: nombre original
+        if (originalName != null) {
+            int dot = originalName.lastIndexOf('.');
+            if (dot >= 0 && dot < originalName.length() - 1) {
+                return originalName.substring(dot + 1).toUpperCase();
+            }
+        }
+        // 2) Mapeo mínimo de MIME comunes
+        if (mime != null) {
+            String ext = MIME_TO_EXT.get(mime.toLowerCase());
+            if (ext != null)
+                return ext;
+            // 3) Heurística genérica: sub-tipo del MIME
+            int slash = mime.indexOf('/');
+            if (slash >= 0 && slash < mime.length() - 1) {
+                return mime.substring(slash + 1).toUpperCase();
+            }
+        }
+        return null;
+    }
+
+    private ProductDto toDto(Product p) {
+        String fotoUrl = (p.getFotografiaProd() != null)
+                ? gatewayBaseUrl + "/api/files/" + p.getIdProducto() + "/" + p.getFotografiaProd()
+                : null;
+
+        List<String> autUrls = (p.getArchivosAut() != null)
+                ? p.getArchivosAut().stream()
+                        .map(id -> gatewayBaseUrl + "/api/files/" + p.getIdProducto() + "/" + id)
+                        .toList()
+                : List.of();
+
+        List<String> formatos = List.of();
+        try {
+            if (p.getArchivosAut() != null && !p.getArchivosAut().isEmpty()) {
+                var metas = fileClient.getMetaByProduct(p.getIdProducto());
+                if (metas != null && !metas.isEmpty()) {
+                    formatos = metas.stream()
+                            .map(m -> guessExt(m.getOriginalName(), m.getFileType()))
+                            .filter(Objects::nonNull)
+                            .distinct()
+                            .toList();
+                }
+            }
+        } catch (Exception e) {
+            log.warn("No se pudieron obtener formatos para producto {}: {}", p.getIdProducto(), e.getMessage());
+        }
+
+        return ProductDto.builder()
+                .idProducto(p.getIdProducto())
+                .nombre(p.getNombre())
+                .descripcionProd(p.getDescripcionProd())
+                .precioIndividual(p.getPrecioIndividual())
+                .fotografiaProd(p.getFotografiaProd())
+                .fotografiaUrl(fotoUrl)
+                .archivosAut(p.getArchivosAut())
+                .archivosAutUrls(autUrls)
+                .formatos(formatos) // ← aquí
+                .estado(p.getEstado().name())
+                .categorias(p.getCategorias().stream().map(Category::getNombre).toList())
+                .especialidades(p.getEspecialidades().stream().map(Category::getNombre).toList())
+                .pais(p.getPais())
+                .uploaderUsername(p.getUploaderUsername())
+                .usuarioDecision(p.getUsuarioDecision())
+                .comentario(p.getComentario())
+                .build();
+    }
 
 }

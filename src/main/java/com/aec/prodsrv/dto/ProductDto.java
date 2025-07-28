@@ -28,5 +28,6 @@ public class ProductDto {
     private String uploaderUsername;
     private String usuarioDecision;
     private String comentario;
+    private List<String> formatos; 
 
 }

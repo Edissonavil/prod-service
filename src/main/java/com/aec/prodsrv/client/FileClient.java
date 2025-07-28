@@ -23,6 +23,8 @@ import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.util.List;
+
 @Component
 public class FileClient {
 
@@ -33,16 +35,20 @@ public class FileClient {
             .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
     public FileClient(@Value("${file-service.base-url}") String baseUrl,
-                      WebClient.Builder builder) {
+            WebClient.Builder builder) {
         this.webClient = builder.baseUrl(baseUrl).build();
     }
 
     private String getAuthToken() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth == null) throw new IllegalStateException("No hay usuario autenticado");
-        if (auth.getDetails() instanceof CustomWebAuthenticationDetails c) return c.getJwtToken();
-        if (auth.getCredentials() instanceof String s && !s.isBlank()) return s;
-        if (auth instanceof JwtAuthenticationToken jwtAuth) return jwtAuth.getToken().getTokenValue();
+        if (auth == null)
+            throw new IllegalStateException("No hay usuario autenticado");
+        if (auth.getDetails() instanceof CustomWebAuthenticationDetails c)
+            return c.getJwtToken();
+        if (auth.getCredentials() instanceof String s && !s.isBlank())
+            return s;
+        if (auth instanceof JwtAuthenticationToken jwtAuth)
+            return jwtAuth.getToken().getTokenValue();
         throw new IllegalStateException("No se encontró JWT");
     }
 
@@ -65,14 +71,18 @@ public class FileClient {
             return null;
         }
 
-        log.info("Preparando subida a file-service. originalFilename={}, contentType={}, size={} bytes, entityId={}, isProduct={}",
+        log.info(
+                "Preparando subida a file-service. originalFilename={}, contentType={}, size={} bytes, entityId={}, isProduct={}",
                 file.getOriginalFilename(), file.getContentType(), file.getSize(), entityId, isProduct);
 
         ByteArrayResource resource;
         try {
             byte[] bytes = file.getBytes();
             resource = new ByteArrayResource(bytes) {
-                @Override public String getFilename() { return file.getOriginalFilename(); }
+                @Override
+                public String getFilename() {
+                    return file.getOriginalFilename();
+                }
             };
             log.info("Bytes listos para enviar: {} bytes", bytes.length);
         } catch (IOException e) {
@@ -131,4 +141,27 @@ public class FileClient {
                 .bodyToMono(byte[].class)
                 .block();
     }
+
+    public List<FileInfoDto> getProductFilesMeta(Long productId) {
+        String token = getAuthToken();
+        return webClient.get()
+                .uri("/api/files/meta/product/{id}", productId)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .retrieve()
+                .bodyToFlux(FileInfoDto.class)
+                .collectList()
+                .block();
+    }
+
+    public List<FileInfoDto> getMetaByProduct(Long productId) {
+        String token = getAuthToken();
+        return webClient.get()
+                .uri("/api/files/meta/product/{id}", productId)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .retrieve()
+                .bodyToFlux(FileInfoDto.class)
+                .collectList()
+                .block();
+    }
+
 }
