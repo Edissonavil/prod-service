@@ -4,7 +4,7 @@ import com.aec.prodsrv.client.dto.FileInfoDto;
 import com.aec.prodsrv.security.JwtAuthenticationFilter.CustomWebAuthenticationDetails;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
-
+import reactor.core.publisher.Mono;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -153,26 +153,36 @@ public class FileClient {
                 .block();
     }
 
-public List<FileInfoDto> getMetaByProduct(Long productId) {
-    String token = getAuthToken(); // ya lo tienes en el cliente
-
-    String uri = "/api/files/meta/product/{productId}";
-    String raw = webClient.get()
-            .uri(uri, productId)
-            .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
-            .retrieve()
-            .bodyToMono(String.class)
-            .block();
-
-    try {
-        return mapper.readValue(
-                raw,
-                mapper.getTypeFactory().constructCollectionType(List.class, FileInfoDto.class)
-        );
-    } catch (Exception ex) {
-        log.warn("No se pudo parsear metadatos de archivos para productId {}: {}", productId, ex.getMessage());
-        return List.of();
+    private String getAuthTokenOrNull() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null)
+            return null;
+        if (auth.getDetails() instanceof CustomWebAuthenticationDetails c)
+            return c.getJwtToken();
+        if (auth.getCredentials() instanceof String s && !s.isBlank())
+            return s;
+        if (auth instanceof JwtAuthenticationToken jwtAuth)
+            return jwtAuth.getToken().getTokenValue();
+        return null;
     }
-}
+
+    public List<FileInfoDto> getMetaByProduct(Long productId) {
+        String token = getAuthTokenOrNull(); // ← NO lanza excepción
+
+        WebClient.RequestHeadersSpec<?> req = webClient.get()
+                .uri("/api/files/meta/product/{productId}", productId);
+
+        if (token != null) {
+            req = req.header(HttpHeaders.AUTHORIZATION, "Bearer " + token);
+        }
+        return req.retrieve()
+                .bodyToFlux(FileInfoDto.class)
+                .collectList()
+                .onErrorResume(ex -> {
+                    log.warn("getMetaByProduct({}) falló: {}", productId, ex.getMessage());
+                    return Mono.just(List.of());
+                })
+                .block();
+    }
 
 }
