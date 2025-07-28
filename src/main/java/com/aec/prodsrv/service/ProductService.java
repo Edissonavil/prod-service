@@ -1,7 +1,7 @@
 package com.aec.prodsrv.service;
 
 import com.aec.prodsrv.client.FileClient;
-import com.aec.prodsrv.dto.StoredFileDto;
+import com.aec.prodsrv.client.dto.FileInfoDto;
 import com.aec.prodsrv.dto.ProductDto;
 import com.aec.prodsrv.model.Category;
 import com.aec.prodsrv.model.Product;
@@ -92,7 +92,7 @@ public class ProductService {
         // Foto
         if (foto != null && !foto.isEmpty()) {
             try {
-                StoredFileDto res = fileClient.uploadProductFile(foto, uploader, productId);
+                FileInfoDto res = fileClient.uploadProductFile(foto, uploader, productId);
                 log.info("Respuesta subida foto: {}", res != null ? res.getDriveFileId() : "null");
                 if (res != null && res.getDriveFileId() != null) {
                     saved.setFotografiaProd(res.getDriveFileId());
@@ -110,7 +110,7 @@ public class ProductService {
             for (MultipartFile mf : archivosAut) {
                 if (mf != null && !mf.isEmpty()) {
                     try {
-                        StoredFileDto res = fileClient.uploadProductFile(mf, uploader, productId);
+                        FileInfoDto res = fileClient.uploadProductFile(mf, uploader, productId);
                         log.info("Respuesta subida archivo {}: {}", mf.getOriginalFilename(),
                                 res != null ? res.getDriveFileId() : "null");
                         if (res != null && res.getDriveFileId() != null) {
@@ -156,7 +156,7 @@ public class ProductService {
                                 p.getFotografiaProd(), id, e.getMessage());
                     }
                 }
-                StoredFileDto res = fileClient.uploadProductFile(foto, uploader, id);
+                FileInfoDto res = fileClient.uploadProductFile(foto, uploader, id);
                 if (res != null && res.getDriveFileId() != null) {
                     p.setFotografiaProd(res.getDriveFileId());
                 } else {
@@ -191,7 +191,7 @@ public class ProductService {
             List<String> nuevos = new ArrayList<>();
             for (MultipartFile mf : archivosAut) {
                 if (mf == null || mf.isEmpty()) continue;
-                StoredFileDto res = fileClient.uploadProductFile(mf, uploader, id);
+                FileInfoDto res = fileClient.uploadProductFile(mf, uploader, id);
                 if (res != null && res.getDriveFileId() != null) {
                     nuevos.add(res.getDriveFileId());
                 } else {
