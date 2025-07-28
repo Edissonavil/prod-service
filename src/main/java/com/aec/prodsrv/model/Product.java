@@ -1,7 +1,11 @@
-package com.aec.prodsrv.model;
-
+// src/main/java/com/aec/prodsrv/model/Product.java
+package com.aec.prodsrv.model; 
 import jakarta.persistence.*;
-import lombok.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import com.aec.prodsrv.util.StringListConverter; // ¡Importa la clase del convertidor!
 
 import java.util.HashSet;
 import java.util.List;
@@ -19,14 +23,21 @@ public class Product {
     private Long idProducto;
 
     private String nombre;
-    @Column(name = "descripcion_prod", length = 5000)
-private String descripcionProd;
-    private Double precioIndividual;
-    @Column(name = "fotografia_prod", length = 5000) // <-- Si esto almacena Base64, es el culpable
-private String fotografiaProd;
 
-@Column(name = "archivos_aut", length = 50000) // <-- Si esto almacena una lista de archivos, es el culpable
-    private List<String> archivosAut;
+    @Column(name = "descripcion_prod", length = 5000)
+    private String descripcionProd;
+
+    private Double precioIndividual;
+
+    @Column(name = "fotografia_prod", length = 5000)
+    private String fotografiaProd; // Correcto: almacena el ID de Google Drive
+
+    // --- ¡CAMBIO CLAVE AQUÍ! ---
+    @Column(name = "archivos_aut", length = 50000)
+    @Convert(converter = StringListConverter.class) // <-- ¡Añade esta línea!
+    private List<String> archivosAut; // Ahora, esta lista se guardará como JSON en la columna 'archivos_aut'
+    // ----------------------------
+
     private String pais;
 
     @Enumerated(EnumType.STRING)
@@ -36,21 +47,19 @@ private String fotografiaProd;
     private String usuarioDecision;
     private String comentario;
 
-    // --- RELACIONES MANY-TO-MANY ---
-
-    @ManyToMany(cascade = {CascadeType.PERSIST, CascadeType.MERGE}) // Es importante que Persist y Merge estén aquí
+    @ManyToMany(cascade = {CascadeType.PERSIST, CascadeType.MERGE})
     @JoinTable(
-        name = "product_categories", // Nombre de la tabla intermedia para categorías
+        name = "product_categories",
         joinColumns = @JoinColumn(name = "product_id"),
         inverseJoinColumns = @JoinColumn(name = "category_id")
     )
-    private Set<Category> categorias = new HashSet<>(); // Inicializa para evitar NPE
+    private Set<Category> categorias = new HashSet<>();
 
-    @ManyToMany(cascade = {CascadeType.PERSIST, CascadeType.MERGE}) // Para especialidades también
+    @ManyToMany(cascade = {CascadeType.PERSIST, CascadeType.MERGE})
     @JoinTable(
-        name = "product_specialties", // Nombre de la tabla intermedia para especialidades
+        name = "product_specialties",
         joinColumns = @JoinColumn(name = "product_id"),
         inverseJoinColumns = @JoinColumn(name = "specialty_id")
     )
-    private Set<Category> especialidades = new HashSet<>(); // Inicializa para evitar NPE
+    private Set<Category> especialidades = new HashSet<>();
 }
