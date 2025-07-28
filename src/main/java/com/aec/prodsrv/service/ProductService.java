@@ -327,60 +327,63 @@ public class ProductService {
         return repo.findByUploaderUsername(username).stream().map(this::toDto).toList();
     }
 
-// ProductService
-
-private static String onlyExt(String originalName) {
-    if (originalName == null) return null;
-    int dot = originalName.lastIndexOf('.');
-    if (dot < 0 || dot == originalName.length() - 1) return null;
-    return originalName.substring(dot + 1).toUpperCase(Locale.ROOT);
-}
-
-private ProductDto toDto(Product p) {
-    String fotoUrl = (p.getFotografiaProd() != null)
-            ? gatewayBaseUrl + "/api/files/" + p.getIdProducto() + "/" + p.getFotografiaProd()
-            : null;
-
-    List<String> autUrls = (p.getArchivosAut() != null)
-            ? p.getArchivosAut().stream()
-                .map(id -> gatewayBaseUrl + "/api/files/" + p.getIdProducto() + "/" + id)
-                .toList()
-            : List.of();
-
-    // === NUEVO: calcular formatos por metadatos ===
-    List<String> formatos = List.of();
-    try {
-        var metas = fileClient.getMetaByProduct(p.getIdProducto());
-        if (metas != null && !metas.isEmpty()) {
-            formatos = metas.stream()
-                    .map(m -> onlyExt(m.getOriginalName()))
-                    .filter(Objects::nonNull)
-                    .distinct()
-                    .toList();
-        }
-    } catch (Exception e) {
-        log.warn("No se pudieron obtener formatos para producto {}: {}", p.getIdProducto(), e.getMessage());
+    private static String onlyExt(String originalName) {
+        if (originalName == null)
+            return null;
+        int dot = originalName.lastIndexOf('.');
+        if (dot < 0 || dot == originalName.length() - 1)
+            return null;
+        return originalName.substring(dot + 1).toUpperCase(Locale.ROOT);
     }
 
-    return ProductDto.builder()
-            .idProducto(p.getIdProducto())
-            .nombre(p.getNombre())
-            .descripcionProd(p.getDescripcionProd())
-            .precioIndividual(p.getPrecioIndividual())
-            .fotografiaProd(p.getFotografiaProd())
-            .fotografiaUrl(fotoUrl)
-            .archivosAut(p.getArchivosAut())
-            .archivosAutUrls(autUrls)
-            .formatos(formatos)                 // ← aquí
-            .estado(p.getEstado().name())
-            .categorias(p.getCategorias().stream().map(Category::getNombre).toList())
-            .especialidades(p.getEspecialidades().stream().map(Category::getNombre).toList())
-            .pais(p.getPais())
-            .uploaderUsername(p.getUploaderUsername())
-            .usuarioDecision(p.getUsuarioDecision())
-            .comentario(p.getComentario())
-            .build();
-}
+    private ProductDto toDto(Product p) {
+        String fotoUrl = (p.getFotografiaProd() != null)
+                ? gatewayBaseUrl + "/api/files/" + p.getIdProducto() + "/" + p.getFotografiaProd()
+                : null;
 
+        List<String> autUrls = (p.getArchivosAut() != null)
+                ? p.getArchivosAut().stream()
+                        .map(id -> gatewayBaseUrl + "/api/files/" + p.getIdProducto() + "/" + id)
+                        .toList()
+                : List.of();
+
+        List<String> formatos = List.of();
+        try {
+            var metas = fileClient.getMetaByProduct(p.getIdProducto());
+            if (metas != null && !metas.isEmpty()) {
+                formatos = metas.stream()
+                        // si NO quieres contar la foto: descarta mime image/*
+                        .filter(m -> m.getFileType() == null || !m.getFileType().startsWith("image/"))
+                        .map(m -> onlyExt(m.getOriginalName()))
+                        .filter(Objects::nonNull)
+                        .distinct()
+                        .toList();
+                log.info("Formatos para producto {}: {}", p.getIdProducto(), formatos);
+            } else {
+                log.info("Metadatos vacíos para producto {}", p.getIdProducto());
+            }
+        } catch (Exception e) {
+            log.warn("No se pudieron obtener formatos para producto {}: {}", p.getIdProducto(), e.getMessage());
+        }
+
+        return ProductDto.builder()
+                .idProducto(p.getIdProducto())
+                .nombre(p.getNombre())
+                .descripcionProd(p.getDescripcionProd())
+                .precioIndividual(p.getPrecioIndividual())
+                .fotografiaProd(p.getFotografiaProd())
+                .fotografiaUrl(fotoUrl)
+                .archivosAut(p.getArchivosAut())
+                .archivosAutUrls(autUrls)
+                .formatos(formatos)
+                .estado(p.getEstado().name())
+                .categorias(p.getCategorias().stream().map(Category::getNombre).toList())
+                .especialidades(p.getEspecialidades().stream().map(Category::getNombre).toList())
+                .pais(p.getPais())
+                .uploaderUsername(p.getUploaderUsername())
+                .usuarioDecision(p.getUsuarioDecision())
+                .comentario(p.getComentario())
+                .build();
+    }
 
 }
