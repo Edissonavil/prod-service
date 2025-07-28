@@ -2,6 +2,8 @@ package com.aec.prodsrv.client;
 
 import com.aec.prodsrv.client.dto.FileInfoDto;
 import com.aec.prodsrv.security.JwtAuthenticationFilter.CustomWebAuthenticationDetails;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,18 +20,17 @@ import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.WebClient;
-import org.springframework.web.reactive.function.client.ClientResponse;
 import org.springframework.web.multipart.MultipartFile;
-import reactor.core.publisher.Mono;
 
 import java.io.IOException;
-
 @Component
 public class FileClient {
 
- private static final Logger log = LoggerFactory.getLogger(FileClient.class);
+    private static final Logger log = LoggerFactory.getLogger(FileClient.class);
 
     private final WebClient webClient;
+    private final ObjectMapper mapper = new ObjectMapper()
+            .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
     public FileClient(@Value("${file-service.base-url}") String baseUrl,
                       WebClient.Builder builder) {
@@ -40,7 +41,7 @@ public class FileClient {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null) throw new IllegalStateException("No hay usuario autenticado");
         if (auth.getDetails() instanceof CustomWebAuthenticationDetails c) return c.getJwtToken();
-        if (auth.getCredentials() instanceof String creds && !creds.isBlank()) return creds;
+        if (auth.getCredentials() instanceof String s && !s.isBlank()) return s;
         if (auth instanceof JwtAuthenticationToken jwtAuth) return jwtAuth.getToken().getTokenValue();
         throw new IllegalStateException("No se encontró JWT");
     }
@@ -54,13 +55,26 @@ public class FileClient {
     }
 
     private FileInfoDto upload(MultipartFile file, String uploader, Long entityId, boolean isProduct) {
-        if (file == null || file.isEmpty()) return null;
+        if (file == null) {
+            log.warn("upload() llamado con file = null (entityId={}, isProduct={})", entityId, isProduct);
+            return null;
+        }
+        if (file.isEmpty()) {
+            log.warn("upload() MultipartFile vacío: originalFilename={}, size=0 (entityId={}, isProduct={})",
+                    file.getOriginalFilename(), entityId, isProduct);
+            return null;
+        }
+
+        log.info("Preparando subida a file-service. originalFilename={}, contentType={}, size={} bytes, entityId={}, isProduct={}",
+                file.getOriginalFilename(), file.getContentType(), file.getSize(), entityId, isProduct);
 
         ByteArrayResource resource;
         try {
-            resource = new ByteArrayResource(file.getBytes()) {
+            byte[] bytes = file.getBytes();
+            resource = new ByteArrayResource(bytes) {
                 @Override public String getFilename() { return file.getOriginalFilename(); }
             };
+            log.info("Bytes listos para enviar: {} bytes", bytes.length);
         } catch (IOException e) {
             throw new RuntimeException("Error leyendo bytes del fichero: " + e.getMessage(), e);
         }
@@ -77,28 +91,27 @@ public class FileClient {
                 .contentType(MediaType.MULTIPART_FORM_DATA)
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                 .body(BodyInserters.fromMultipartData(form))
-                .exchangeToMono(resp -> handleResponse(resp, uri))
+                .exchangeToMono(resp -> {
+                    HttpStatusCode status = resp.statusCode();
+                    return resp.bodyToMono(String.class)
+                            .defaultIfEmpty("")
+                            .map(body -> {
+                                log.info("FileService {} -> status={}, body={}", uri, status.value(), body);
+                                if (!status.is2xxSuccessful()) {
+                                    throw new IllegalStateException("FileService " + uri + " -> " + status.value());
+                                }
+                                try {
+                                    FileInfoDto dto = mapper.readValue(body, FileInfoDto.class);
+                                    log.info("DTO deserializado: driveFileId={}, filename={}",
+                                            dto.getDriveFileId(), dto.getFilename());
+                                    return dto;
+                                } catch (Exception ex) {
+                                    log.error("Error deserializando JSON: {}", ex.getMessage(), ex);
+                                    throw new IllegalStateException("No se pudo parsear respuesta de file-service", ex);
+                                }
+                            });
+                })
                 .block();
-    }
-
-    private Mono<FileInfoDto> handleResponse(ClientResponse resp, String uri) {
-        HttpStatusCode status = resp.statusCode();
-        return resp.bodyToMono(String.class)
-                .defaultIfEmpty("")
-                .flatMap(body -> {
-                    if (status.is2xxSuccessful()) {
-                        log.info("FileService {} OK. JSON crudo: {}", uri, body);
-                        try {
-                            return Mono.justOrEmpty(WebClientUtils.readAs(body, FileInfoDto.class));
-                        } catch (Exception ex) {
-                            log.error("Error deserializando respuesta de {}: {}", uri, ex.getMessage(), ex);
-                            return Mono.error(ex);
-                        }
-                    } else {
-                        log.error("FileService {} ERROR status={}, body={}", uri, status.value(), body);
-                        return Mono.error(new IllegalStateException("FileService " + uri + " -> " + status.value()));
-                    }
-                });
     }
 
     public void deleteFile(String driveFileId) {
