@@ -327,33 +327,33 @@ public class ProductService {
         return repo.findByUploaderUsername(username).stream().map(this::toDto).toList();
     }
 
-    private ProductDto toDto(Product p) {
-        String fotoUrl = (p.getFotografiaProd() != null)
-                ? gatewayBaseUrl + "/api/files/" + p.getFotografiaProd()
-                : null;
+private ProductDto toDto(Product p) {
+    String fotoUrl = (p.getFotografiaProd() != null)
+            ? gatewayBaseUrl + "/api/files/" + p.getIdProducto() + "/" + p.getFotografiaProd()
+            : null;
+    List<String> autUrls = (p.getArchivosAut() != null)
+            ? p.getArchivosAut().stream()
+                .map(id -> gatewayBaseUrl + "/api/files/" + p.getIdProducto() + "/" + id)
+                .toList()
+            : List.of();
 
-        List<String> autUrls = (p.getArchivosAut() != null)
-                ? p.getArchivosAut().stream()
-                        .map(id -> gatewayBaseUrl + "/api/files/" + id)
-                        .toList()
-                : List.of();
+    return ProductDto.builder()
+            .idProducto(p.getIdProducto())
+            .nombre(p.getNombre())
+            .descripcionProd(p.getDescripcionProd())
+            .precioIndividual(p.getPrecioIndividual())
+            .fotografiaProd(p.getFotografiaProd())   // driveId
+            .fotografiaUrl(fotoUrl)                  // URL vía Gateway
+            .archivosAut(p.getArchivosAut())         // driveIds
+            .archivosAutUrls(autUrls)                // URLs vía Gateway
+            .estado(p.getEstado().name())
+            .categorias(p.getCategorias().stream().map(Category::getNombre).toList())
+            .especialidades(p.getEspecialidades().stream().map(Category::getNombre).toList())
+            .pais(p.getPais())
+            .uploaderUsername(p.getUploaderUsername())
+            .usuarioDecision(p.getUsuarioDecision())
+            .comentario(p.getComentario())
+            .build();
+}
 
-        return ProductDto.builder()
-                .idProducto(p.getIdProducto())
-                .nombre(p.getNombre())
-                .descripcionProd(p.getDescripcionProd())
-                .precioIndividual(p.getPrecioIndividual())
-                .fotografiaProd(p.getFotografiaProd()) // driveId
-                .fotografiaUrl(fotoUrl) // URL vía Gateway
-                .archivosAut(p.getArchivosAut()) // driveIds
-                .archivosAutUrls(autUrls) // URLs vía Gateway
-                .estado(p.getEstado().name())
-                .categorias(p.getCategorias().stream().map(Category::getNombre).toList())
-                .especialidades(p.getEspecialidades().stream().map(Category::getNombre).toList())
-                .pais(p.getPais())
-                .uploaderUsername(p.getUploaderUsername())
-                .usuarioDecision(p.getUsuarioDecision())
-                .comentario(p.getComentario())
-                .build();
-    }
 }
