@@ -1,42 +1,60 @@
 package com.aec.prodsrv.service;
 
 import com.aec.prodsrv.client.FileClient;
-import com.aec.prodsrv.client.FileClient.UploadFileResponse;
+import com.aec.prodsrv.dto.FileInfoResponse;
 import com.aec.prodsrv.dto.ProductDto;
-import com.aec.prodsrv.model.*;
-import com.aec.prodsrv.repository.*;
-
+import com.aec.prodsrv.model.Category;
+import com.aec.prodsrv.model.Product;
+import com.aec.prodsrv.model.ProductStatus;
+import com.aec.prodsrv.repository.CategoryRepository;
+import com.aec.prodsrv.repository.ProductRepository;
+import jakarta.annotation.PostConstruct;
 import jakarta.persistence.EntityNotFoundException;
-import lombok.RequiredArgsConstructor;
-
+import jakarta.transaction.Transactional;
+import jakarta.validation.Valid;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.data.domain.*;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.*;
 import java.util.stream.Collectors;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 @Service
-@RequiredArgsConstructor
 @Transactional
 public class ProductService {
+
+    private static final Logger log = LoggerFactory.getLogger(ProductService.class);
 
     private final ProductRepository repo;
     private final CategoryRepository catRepo;
     private final FileClient fileClient;
-    private static final Logger log = LoggerFactory.getLogger(ProductService.class);
 
     @Value("${file-service.base-url}")
     private String fileServiceBaseUrl;
 
-    public Page<ProductDto> pendientes(Pageable pg) {
+    @Value("${gateway.public-base-url}")
+    private String gatewayBaseUrl;
+
+    public ProductService(ProductRepository repo,
+                          CategoryRepository catRepo,
+                          FileClient fileClient) {
+        this.repo = repo;
+        this.catRepo = catRepo;
+        this.fileClient = fileClient;
+    }
+
+    @PostConstruct
+    void logBases() {
+        log.info("file-service.base-url = {}", fileServiceBaseUrl);
+        log.info("gateway.public-base-url = {}", gatewayBaseUrl);
+    }
+
+    public Page<ProductDto> pendientes(org.springframework.data.domain.Pageable pg) {
         return repo.findByEstado(ProductStatus.PENDIENTE, pg).map(this::toDto);
     }
 
@@ -49,12 +67,12 @@ public class ProductService {
         return toDto(repo.save(p));
     }
 
-    public ProductDto create(ProductDto dto,
-            MultipartFile foto,
-            List<MultipartFile> archivosAut,
-            String uploader) {
+    public ProductDto create(@Valid ProductDto dto,
+                             MultipartFile foto,
+                             List<MultipartFile> archivosAut,
+                             String uploader) {
 
-        Set<Category> cats = namesToCategorySet(dto.getCategorias());
+        Set<Category> cats  = namesToCategorySet(dto.getCategorias());
         Set<Category> specs = namesToCategorySet(dto.getEspecialidades());
 
         Product p = Product.builder()
@@ -72,105 +90,115 @@ public class ProductService {
         Long productId = saved.getIdProducto();
         log.info("Producto guardado con ID: {}", productId);
 
-        // foto
+        // Foto
         if (foto != null && !foto.isEmpty()) {
             try {
-                // ✅ Obtener UploadFileResponse
-                UploadFileResponse res = fileClient.uploadProductFile(foto, uploader, productId);
-                // ✅ Guardar el googleDriveFileId en fotografiaProd
-                saved.setFotografiaProd(res.googleDriveFileId());
+                FileInfoResponse res = fileClient.uploadProductFile(foto, uploader, productId);
+                if (res != null && res.driveFileId() != null) {
+                    saved.setFotografiaProd(res.driveFileId());
+                    log.info("Foto subida a Drive. driveFileId={}, originalName={}", res.driveFileId(), res.originalName());
+                } else {
+                    log.warn("Subida de foto devolvió respuesta nula o sin driveFileId");
+                }
             } catch (Exception e) {
-                log.error("Error subiendo foto para producto {}: {}", productId, e.getMessage());
-                // Considera relanzar o manejar más robustamente
+                log.error("Error subiendo foto para producto {}: {}", productId, e.getMessage(), e);
             }
         }
 
-        // archivos autorizados
-        if (archivosAut != null) {
-            List<String> googleDriveFileIds = new ArrayList<>(); // ✅ Cambiado a almacenar IDs
+        // Archivos autorizados
+        if (archivosAut != null && !archivosAut.isEmpty()) {
+            List<String> ids = new ArrayList<>();
             for (MultipartFile mf : archivosAut) {
-                if (!mf.isEmpty()) {
-                    try {
-                        // ✅ Obtener UploadFileResponse
-                        UploadFileResponse res = fileClient.uploadProductFile(mf, uploader, productId);
-                        // ✅ Guardar el googleDriveFileId
-                        googleDriveFileIds.add(res.googleDriveFileId());
-                    } catch (Exception e) {
-                        log.error("Error subiendo archivo {}: {}", mf.getOriginalFilename(), e.getMessage());
-                        // Considera relanzar o manejar más robustamente
+                if (mf == null || mf.isEmpty()) continue;
+                try {
+                    FileInfoResponse res = fileClient.uploadProductFile(mf, uploader, productId);
+                    if (res != null && res.driveFileId() != null) {
+                        ids.add(res.driveFileId());
+                        log.info("Archivo autorizado subido a Drive. id={}", res.driveFileId());
+                    } else {
+                        log.warn("Subida de archivo devolvió respuesta nula o sin driveFileId. original={}", mf.getOriginalFilename());
                     }
+                } catch (Exception e) {
+                    log.error("Error subiendo archivo {}: {}", mf.getOriginalFilename(), e.getMessage(), e);
                 }
             }
-            // ✅ Asignar la lista de Google Drive IDs
-            saved.setArchivosAut(googleDriveFileIds);
+            saved.setArchivosAut(ids);
         }
 
-        // Guarda el producto nuevamente con los IDs de archivos actualizados
-        return toDto(repo.save(saved));
+        // Guardar cambios y devolver DTO
+        Product updated = repo.save(saved);
+        return toDto(updated);
     }
 
     public ProductDto update(Long id,
-            ProductDto dto,
-            MultipartFile foto,
-            List<MultipartFile> archivosAut,
-            String uploader) {
+                             @Valid ProductDto dto,
+                             MultipartFile foto,
+                             List<MultipartFile> archivosAut,
+                             String uploader) {
 
         Product p = repo.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Producto no encontrado: " + id));
-        if (!p.getUploaderUsername().equals(uploader)) {
+
+        if (!Objects.equals(p.getUploaderUsername(), uploader)) {
             throw new SecurityException("Sin permiso");
         }
 
+        // Foto
         if (foto != null) {
             if (!foto.isEmpty()) {
-                // ✅ Borrar la foto anterior si existe antes de subir la nueva
                 if (p.getFotografiaProd() != null) {
                     try {
-                        fileClient.deleteFile(p.getFotografiaProd()); // ✅ Borrar la foto antigua de GD
+                        fileClient.deleteFile(p.getFotografiaProd()); // borra la anterior en Drive
                     } catch (Exception e) {
-                        log.warn("No se pudo eliminar la foto anterior {} para producto {}: {}", p.getFotografiaProd(),
-                                id, e.getMessage());
+                        log.warn("No se pudo eliminar la foto anterior {} para producto {}: {}",
+                                p.getFotografiaProd(), id, e.getMessage());
                     }
                 }
-                UploadFileResponse res = fileClient.uploadProductFile(foto, uploader, id);
-                p.setFotografiaProd(res.googleDriveFileId());
-            } else { // Si el MultipartFile se envió pero estaba vacío, asumimos que se quiere borrar
+                FileInfoResponse res = fileClient.uploadProductFile(foto, uploader, id);
+                if (res != null && res.driveFileId() != null) {
+                    p.setFotografiaProd(res.driveFileId());
+                } else {
+                    log.warn("Subida de foto en update devolvió respuesta nula o sin driveFileId");
+                }
+            } else {
+                // Se envió parte 'foto' pero vacía: eliminar
                 if (p.getFotografiaProd() != null) {
                     try {
-                        fileClient.deleteFile(p.getFotografiaProd()); // ✅ Borrar la foto antigua de GD
+                        fileClient.deleteFile(p.getFotografiaProd());
                     } catch (Exception e) {
                         log.warn("No se pudo eliminar la foto vacía para producto {}: {}", id, e.getMessage());
                     }
                 }
-                p.setFotografiaProd(null); // Eliminar referencia en DB
+                p.setFotografiaProd(null);
             }
         }
 
-        // archivos autorizados
-        if (archivosAut != null) { // Si el cliente envía `archivosAut` (incluso vacío)
-            // Primero, eliminar los archivos antiguos de Google Drive
+        // Archivos autorizados (si el cliente envía la parte, incluso vacía)
+        if (archivosAut != null) {
             if (p.getArchivosAut() != null) {
-                for (String oldFileId : p.getArchivosAut()) {
+                for (String oldId : p.getArchivosAut()) {
                     try {
-                        fileClient.deleteFile(oldFileId); // ✅ Borrar archivos antiguos de GD
+                        fileClient.deleteFile(oldId);
                     } catch (Exception e) {
-                        log.warn("No se pudo eliminar el archivo antiguo {} para producto {}: {}", oldFileId, id,
-                                e.getMessage());
+                        log.warn("No se pudo eliminar el archivo antiguo {} para producto {}: {}", oldId, id, e.getMessage());
                     }
                 }
             }
 
-            List<String> newGoogleDriveFileIds = new ArrayList<>(); // ✅ Almacenar nuevos IDs
+            List<String> nuevos = new ArrayList<>();
             for (MultipartFile mf : archivosAut) {
-                if (!mf.isEmpty()) {
-                    UploadFileResponse res = fileClient.uploadProductFile(mf, uploader, id);
-                    newGoogleDriveFileIds.add(res.googleDriveFileId());
+                if (mf == null || mf.isEmpty()) continue;
+                FileInfoResponse res = fileClient.uploadProductFile(mf, uploader, id);
+                if (res != null && res.driveFileId() != null) {
+                    nuevos.add(res.driveFileId());
+                } else {
+                    log.warn("Subida de archivo en update devolvió respuesta nula o sin driveFileId. original={}", mf.getOriginalFilename());
                 }
             }
-            p.setArchivosAut(newGoogleDriveFileIds); // ✅ Asignar la nueva lista de IDs
+            p.setArchivosAut(nuevos);
         }
 
-        // resto de campos
+        // Resto de campos
         p.setNombre(dto.getNombre());
         p.setDescripcionProd(dto.getDescripcionProd());
         p.setPrecioIndividual(dto.getPrecioIndividual());
@@ -188,80 +216,79 @@ public class ProductService {
     public void deleteProduct(Long id, String uploader) {
         Product p = repo.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Producto no encontrado"));
-        if (!p.getUploaderUsername().equals(uploader))
+        if (!Objects.equals(p.getUploaderUsername(), uploader)) {
             throw new SecurityException("No autorizado");
+        }
+        // (Opcional) borrar archivos de Drive asociados antes de borrar el producto
+        if (p.getFotografiaProd() != null) {
+            try { fileClient.deleteFile(p.getFotografiaProd()); } catch (Exception ignored) {}
+        }
+        if (p.getArchivosAut() != null) {
+            for (String fid : p.getArchivosAut()) {
+                try { fileClient.deleteFile(fid); } catch (Exception ignored) {}
+            }
+        }
         repo.delete(p);
     }
 
-    public Page<ProductDto> findAll(Pageable pg) {
+    public org.springframework.data.domain.Page<ProductDto> findAll(org.springframework.data.domain.Pageable pg) {
         return repo.findAll(pg).map(this::toDto);
     }
 
-    public Page<ProductDto> findByEstado(ProductStatus e, Pageable pg) {
+    public org.springframework.data.domain.Page<ProductDto> findByEstado(ProductStatus e, org.springframework.data.domain.Pageable pg) {
         return repo.findByEstado(e, pg).map(this::toDto);
     }
 
-    public Page<ProductDto> findByUploaderId(String u, Pageable pg) {
+    public org.springframework.data.domain.Page<ProductDto> findByUploaderId(String u, org.springframework.data.domain.Pageable pg) {
         return repo.findByUploaderUsername(u, pg).map(this::toDto);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional(Transactional.TxType.SUPPORTS)
     public ProductDto getById(Long id) {
         return toDto(
                 repo.findById(id)
-                        .orElseThrow(() -> new ResponseStatusException(
-                                HttpStatus.NOT_FOUND,
-                                "Producto con ID " + id + " no existe")));
+                        .orElseThrow(() ->
+                                new ResponseStatusException(HttpStatus.NOT_FOUND, "Producto con ID " + id + " no existe"))
+        );
     }
 
     private Set<Category> namesToCategorySet(List<String> names) {
-        if (names == null)
-            return Collections.emptySet();
-        return names.stream()
-                .map(this::resolveOrCreateCategory)
-                .collect(Collectors.toSet());
+        if (names == null) return Collections.emptySet();
+        return names.stream().map(this::resolveOrCreateCategory).collect(Collectors.toSet());
     }
 
     private Category resolveOrCreateCategory(String nombre) {
         return catRepo.findByNombreIgnoreCase(nombre)
-
                 .orElseGet(() -> catRepo.save(Category.builder().nombre(nombre).build()));
     }
 
-    public List<ProductDto> findByUploaderUsername(String uploader) {
-        return repo.findByUploaderUsername(uploader)
-                .stream()
-                .map(this::toDto)
-                .toList();
-    }
+    public List<ProductDto> findByUploaderUsername(String username) {
+    return repo.findByUploaderUsername(username)
+               .stream()
+               .map(this::toDto)
+               .toList();
+}
 
     private ProductDto toDto(Product p) {
         String fotoUrl = (p.getFotografiaProd() != null)
-                ? fileServiceBaseUrl + "/api/files/download/" + p.getFotografiaProd() // ✅ URL de descarga de Google
-                                                                                      // Drive
+                ? gatewayBaseUrl + "/api/files/" + p.getFotografiaProd()
                 : null;
 
         List<String> autUrls = (p.getArchivosAut() != null)
                 ? p.getArchivosAut().stream()
-                        .map(googleDriveFileId -> fileServiceBaseUrl + "/api/files/download/" + googleDriveFileId) // ✅
-                                                                                                                   // URL
-                                                                                                                   // de
-                                                                                                                   // descarga
-                                                                                                                   // de
-                                                                                                                   // Google
-                                                                                                                   // Drive
-                        .toList()
-                : Collections.emptyList();
+                    .map(id -> gatewayBaseUrl + "/api/files/" + id)
+                    .toList()
+                : List.of();
 
         return ProductDto.builder()
                 .idProducto(p.getIdProducto())
                 .nombre(p.getNombre())
                 .descripcionProd(p.getDescripcionProd())
                 .precioIndividual(p.getPrecioIndividual())
-                .fotografiaProd(p.getFotografiaProd()) // Sigue siendo el ID de Google Drive
-                .fotografiaUrl(fotoUrl)
-                .archivosAut(p.getArchivosAut()) // Sigue siendo la lista de IDs de Google Drive
-                .archivosAutUrls(autUrls)
+                .fotografiaProd(p.getFotografiaProd())   // driveId
+                .fotografiaUrl(fotoUrl)                   // URL vía Gateway
+                .archivosAut(p.getArchivosAut())          // driveIds
+                .archivosAutUrls(autUrls)                 // URLs vía Gateway
                 .estado(p.getEstado().name())
                 .categorias(p.getCategorias().stream().map(Category::getNombre).toList())
                 .especialidades(p.getEspecialidades().stream().map(Category::getNombre).toList())
@@ -271,5 +298,4 @@ public class ProductService {
                 .comentario(p.getComentario())
                 .build();
     }
-
 }

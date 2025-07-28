@@ -55,3 +55,7 @@ logging:
     org.springframework.web: DEBUG
     org.hibernate: DEBUG
     com.aec.prodsrv: DEBUG
+
+  gateway:
+  public-base-url: ${GATEWAY_PUBLIC_BASE_URL:https://gateway-production-129e.up.railway.app}
+
