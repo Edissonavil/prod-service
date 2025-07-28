@@ -1,62 +1,65 @@
 spring:
   application:
-    name: aec-prod # Nombre de la aplicación, generalmente se usa el nombre del servicio
+    name: aec-prod
   docker:
     compose:
-      enabled: false # Deshabilita la integración con Docker Compose
+      enabled: false
   cloud:
     compatibility-verifier:
-      enabled: false # Deshabilita el verificador de compatibilidad de Spring Cloud
+      enabled: false
   servlet:
     multipart:
-      max-file-size: 1000MB # Tamaño máximo de archivo para subidas
-      max-request-size: 1000MB # Tamaño máximo de la solicitud para subidas
+      max-file-size: 1000MB
+      max-request-size: 1000MB
 
   # Configuración de la base de datos
   datasource:
-    # Usamos las variables específicas de PostgreSQL que Railway inyecta directamente
     url: jdbc:postgresql://${PGHOST}:${PGPORT}/${PGDATABASE}
     username: ${PGUSER}
     password: ${PGPASSWORD}
     driver-class-name: org.postgresql.Driver
+  
   jpa:
     hibernate:
-      ddl-auto: ${DDL_AUTO:update} # 'update' es un buen valor por defecto para desarrollo.
-                                    # ¡Asegúrate de usar 'validate' o 'none' en producción en Railway!
-    show-sql: true # Útil para depuración, pero considera 'false' en producción
+      ddl-auto: ${DDL_AUTO:update}
+    show-sql: true
     properties:
-      hibernate.dialect: org.hibernate.dialect.PostgreSQLDialect # Siempre especifica el dialecto
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+        jdbc:
+          batch_size: 20
+        order_inserts: true
+        order_updates: true
 
 server:
   port: ${PORT:8080}
 
 jwt:
-  secret: ${JWT_SECRET} # ¡CRÍTICO! SIN valor por defecto para seguridad
-  accessMs: ${JWT_ACCESS_MS:3600000} # Las duraciones pueden tener valores por defecto
-  refreshMs: ${JWT_REFRESH_MS:86400000} # Las duraciones pueden tener valores por defecto
+  secret: ${JWT_SECRET}
+  accessMs: ${JWT_ACCESS_MS:3600000}
+  refreshMs: ${JWT_REFRESH_MS:86400000}
 
-# URLs de comunicación con otros microservicios (¡usando dominios internos de Railway!)
-# prod-service application.yml
 file-service:
-  internal-base-url: ${FILE_SERVICE_BASE_URL:http://file-service.railway.internal:8084}
-  public-gateway-url: ${PUBLIC_GATEWAY_URL:https://gateway-production-129e.up.railway.app}
+  base-url: ${FILE_SERVICE_BASE_URL:http://file-service.railway.internal:8084}
+
+gateway:
+  public-base-url: ${GATEWAY_PUBLIC_BASE_URL:https://gateway-production-129e.up.railway.app}
+
 users:
   service:
-    url: ${USERS_SERVICE_URL:http://users-service.railway.internal/api/users:8081} # Dominio interno de Railway
-                                                                                 # Ajusta 'users-service' al nombre exacto de tu servicio en Railway
+    url: ${USERS_SERVICE_URL:http://users-service.railway.internal:8081/api/users}
 
-# Configuración del directorio de subida de archivos (¡Importante para Railway!)
 file:
-  upload-dir: ${UPLOAD_DIR:/app/uploads} # Ruta de directorio genérica dentro del contenedor de Railway
-                                          # Para persistencia real, considera los volúmenes persistentes de Railway
+  upload-dir: ${UPLOAD_DIR:/app/uploads}
 
 logging:
   level:
     root: DEBUG
     org.springframework.web: DEBUG
     org.hibernate: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
     com.aec.prodsrv: DEBUG
-
-  gateway:
-    public-base-url: ${GATEWAY_PUBLIC_BASE_URL:https://gateway-production-129e.up.railway.app}
-
+    # Agrega logging específico para Feign si usas OpenFeign
+    org.springframework.cloud.openfeign: DEBUG

@@ -34,14 +34,14 @@ public class ProductService {
     private final FileClient fileClient;
 
     @Value("${file-service.base-url}")
-    private String fileServiceBaseUrl;   // uso interno (S2S) si lo necesitas
+    private String fileServiceBaseUrl; // uso interno (S2S) si lo necesitas
 
     @Value("${gateway.public-base-url}")
-    private String gatewayBaseUrl;       // para construir URLs consumibles por el navegador
+    private String gatewayBaseUrl; // para construir URLs consumibles por el navegador
 
     public ProductService(ProductRepository repo,
-                          CategoryRepository catRepo,
-                          FileClient fileClient) {
+            CategoryRepository catRepo,
+            FileClient fileClient) {
         this.repo = repo;
         this.catRepo = catRepo;
         this.fileClient = fileClient;
@@ -66,12 +66,17 @@ public class ProductService {
         return toDto(repo.save(p));
     }
 
-public ProductDto create(@Valid ProductDto dto,
-                             MultipartFile foto,
-                             List<MultipartFile> archivosAut,
-                             String uploader) {
+    public ProductDto create(@Valid ProductDto dto,
+            MultipartFile foto,
+            List<MultipartFile> archivosAut,
+            String uploader) {
 
-        Set<Category> cats  = namesToCategorySet(dto.getCategorias());
+        log.info("=== INICIANDO CREACIÓN DE PRODUCTO ===");
+        log.info("Datos recibidos - Nombre: {}, Uploader: {}", dto.getNombre(), uploader);
+        log.info("Foto recibida: {}", foto != null ? foto.getOriginalFilename() : "null");
+        log.info("Archivos recibidos: {}", archivosAut != null ? archivosAut.size() : 0);
+
+        Set<Category> cats = namesToCategorySet(dto.getCategorias());
         Set<Category> specs = namesToCategorySet(dto.getEspecialidades());
 
         Product p = Product.builder()
@@ -85,59 +90,101 @@ public ProductDto create(@Valid ProductDto dto,
                 .especialidades(specs)
                 .build();
 
-        // Primer guardado para obtener el ID y poner la entidad en el contexto de persistencia
+        // Primer guardado para obtener el ID
         Product saved = repo.save(p);
+        repo.flush(); // Fuerza el flush para asegurar que el ID esté disponible
         Long productId = saved.getIdProducto();
         log.info("Producto guardado inicialmente con ID: {}", productId);
 
+        // Variable para controlar si hubo cambios
+        boolean hasChanges = false;
+
         // Foto
         if (foto != null && !foto.isEmpty()) {
+            log.info("Procesando foto: {}, tamaño: {} bytes", foto.getOriginalFilename(), foto.getSize());
             try {
                 FileInfoDto res = fileClient.uploadProductFile(foto, uploader, productId);
-                log.info("Respuesta subida foto: {}", res != null ? res.getDriveFileId() : "null");
-                if (res != null && res.getDriveFileId() != null) {
-                    // Actualiza la misma instancia 'saved' que ya está en el contexto de persistencia
-                    saved.setFotografiaProd(res.getDriveFileId());
+                log.info("Respuesta completa del FileClient para foto: {}", res);
+
+                if (res != null) {
+                    log.info("DriveFileId de foto: '{}'", res.getDriveFileId());
+                    if (res.getDriveFileId() != null && !res.getDriveFileId().trim().isEmpty()) {
+                        saved.setFotografiaProd(res.getDriveFileId());
+                        hasChanges = true;
+                        log.info("✅ ID de foto asignado correctamente: {}", res.getDriveFileId());
+                    } else {
+                        log.error("❌ DriveFileId de foto está vacío o nulo");
+                    }
                 } else {
-                    log.warn("Upload foto devolvió respuesta nula o sin driveFileId para producto {}", productId);
+                    log.error("❌ Respuesta del FileClient es nula para foto");
                 }
             } catch (Exception e) {
-                log.error("Error subiendo foto para producto {}: {}", productId, e.getMessage(), e);
+                log.error("❌ Error subiendo foto para producto {}: {}", productId, e.getMessage(), e);
             }
         }
 
         // Archivos autorizados
-        if (archivosAut != null) {
+        if (archivosAut != null && !archivosAut.isEmpty()) {
+            log.info("Procesando {} archivos autorizados", archivosAut.size());
             List<String> driveIds = new ArrayList<>();
-            for (MultipartFile mf : archivosAut) {
+
+            for (int i = 0; i < archivosAut.size(); i++) {
+                MultipartFile mf = archivosAut.get(i);
                 if (mf != null && !mf.isEmpty()) {
+                    log.info("Procesando archivo {}/{}: {}, tamaño: {} bytes",
+                            i + 1, archivosAut.size(), mf.getOriginalFilename(), mf.getSize());
                     try {
                         FileInfoDto res = fileClient.uploadProductFile(mf, uploader, productId);
-                        log.info("Respuesta subida archivo {}: {}", mf.getOriginalFilename(),
-                                res != null ? res.getDriveFileId() : "null");
-                        if (res != null && res.getDriveFileId() != null) {
-                            driveIds.add(res.getDriveFileId());
+                        log.info("Respuesta completa del FileClient para archivo {}: {}",
+                                mf.getOriginalFilename(), res);
+
+                        if (res != null) {
+                            log.info("DriveFileId de archivo: '{}'", res.getDriveFileId());
+                            if (res.getDriveFileId() != null && !res.getDriveFileId().trim().isEmpty()) {
+                                driveIds.add(res.getDriveFileId());
+                                log.info("✅ ID de archivo agregado: {}", res.getDriveFileId());
+                            } else {
+                                log.error("❌ DriveFileId de archivo está vacío o nulo");
+                            }
                         } else {
-                            log.warn("Upload archivo {} devolvió respuesta nula/sin driveFileId",
+                            log.error("❌ Respuesta del FileClient es nula para archivo: {}",
                                     mf.getOriginalFilename());
                         }
                     } catch (Exception e) {
-                        log.error("Error subiendo archivo {}: {}", mf.getOriginalFilename(), e.getMessage(), e);
+                        log.error("❌ Error subiendo archivo {}: {}", mf.getOriginalFilename(), e.getMessage(), e);
                     }
                 }
             }
-            saved.setArchivosAut(driveIds);
+
+            if (!driveIds.isEmpty()) {
+                saved.setArchivosAut(driveIds);
+                hasChanges = true;
+                log.info("✅ {} IDs de archivos asignados: {}", driveIds.size(), driveIds);
+            } else {
+                log.warn("⚠️ No se pudieron procesar archivos o todos fallaron");
+            }
         }
 
+        // SEGUNDO GUARDADO - Solo si hubo cambios en los archivos
+        if (hasChanges) {
+            log.info("Guardando cambios de archivos en base de datos...");
+            saved = repo.save(saved);
+            repo.flush(); // Asegurar que se persistan los cambios
+            log.info("✅ Producto actualizado con archivos. Foto: '{}', Archivos: {}",
+                    saved.getFotografiaProd(), saved.getArchivosAut());
+        } else {
+            log.warn("⚠️ No hubo cambios en archivos para guardar");
+        }
 
-        return toDto(saved); 
+        log.info("=== CREACIÓN DE PRODUCTO COMPLETADA ===");
+        return toDto(saved);
     }
 
     public ProductDto update(Long id,
-                             @Valid ProductDto dto,
-                             MultipartFile foto,
-                             List<MultipartFile> archivosAut,
-                             String uploader) {
+            @Valid ProductDto dto,
+            MultipartFile foto,
+            List<MultipartFile> archivosAut,
+            String uploader) {
 
         Product p = repo.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Producto no encontrado: " + id));
@@ -191,7 +238,8 @@ public ProductDto create(@Valid ProductDto dto,
 
             List<String> nuevos = new ArrayList<>();
             for (MultipartFile mf : archivosAut) {
-                if (mf == null || mf.isEmpty()) continue;
+                if (mf == null || mf.isEmpty())
+                    continue;
                 FileInfoDto res = fileClient.uploadProductFile(mf, uploader, id);
                 if (res != null && res.getDriveFileId() != null) {
                     nuevos.add(res.getDriveFileId());
@@ -226,11 +274,17 @@ public ProductDto create(@Valid ProductDto dto,
         }
         // Opcional: borrar archivos de Drive
         if (p.getFotografiaProd() != null) {
-            try { fileClient.deleteFile(p.getFotografiaProd()); } catch (Exception ignored) {}
+            try {
+                fileClient.deleteFile(p.getFotografiaProd());
+            } catch (Exception ignored) {
+            }
         }
         if (p.getArchivosAut() != null) {
             for (String fid : p.getArchivosAut()) {
-                try { fileClient.deleteFile(fid); } catch (Exception ignored) {}
+                try {
+                    fileClient.deleteFile(fid);
+                } catch (Exception ignored) {
+                }
             }
         }
         repo.delete(p);
@@ -241,12 +295,12 @@ public ProductDto create(@Valid ProductDto dto,
     }
 
     public org.springframework.data.domain.Page<ProductDto> findByEstado(ProductStatus e,
-                                                                        org.springframework.data.domain.Pageable pg) {
+            org.springframework.data.domain.Pageable pg) {
         return repo.findByEstado(e, pg).map(this::toDto);
     }
 
     public org.springframework.data.domain.Page<ProductDto> findByUploaderId(String u,
-                                                                             org.springframework.data.domain.Pageable pg) {
+            org.springframework.data.domain.Pageable pg) {
         return repo.findByUploaderUsername(u, pg).map(this::toDto);
     }
 
@@ -255,13 +309,12 @@ public ProductDto create(@Valid ProductDto dto,
         return toDto(
                 repo.findById(id)
                         .orElseThrow(() -> new ResponseStatusException(
-                                HttpStatus.NOT_FOUND, "Producto con ID " + id + " no existe"
-                        ))
-        );
+                                HttpStatus.NOT_FOUND, "Producto con ID " + id + " no existe")));
     }
 
     private Set<Category> namesToCategorySet(List<String> names) {
-        if (names == null) return Collections.emptySet();
+        if (names == null)
+            return Collections.emptySet();
         return names.stream().map(this::resolveOrCreateCategory).collect(Collectors.toSet());
     }
 
@@ -281,8 +334,8 @@ public ProductDto create(@Valid ProductDto dto,
 
         List<String> autUrls = (p.getArchivosAut() != null)
                 ? p.getArchivosAut().stream()
-                    .map(id -> gatewayBaseUrl + "/api/files/" + id)
-                    .toList()
+                        .map(id -> gatewayBaseUrl + "/api/files/" + id)
+                        .toList()
                 : List.of();
 
         return ProductDto.builder()
@@ -290,10 +343,10 @@ public ProductDto create(@Valid ProductDto dto,
                 .nombre(p.getNombre())
                 .descripcionProd(p.getDescripcionProd())
                 .precioIndividual(p.getPrecioIndividual())
-                .fotografiaProd(p.getFotografiaProd())   // driveId
-                .fotografiaUrl(fotoUrl)                  // URL vía Gateway
-                .archivosAut(p.getArchivosAut())         // driveIds
-                .archivosAutUrls(autUrls)                // URLs vía Gateway
+                .fotografiaProd(p.getFotografiaProd()) // driveId
+                .fotografiaUrl(fotoUrl) // URL vía Gateway
+                .archivosAut(p.getArchivosAut()) // driveIds
+                .archivosAutUrls(autUrls) // URLs vía Gateway
                 .estado(p.getEstado().name())
                 .categorias(p.getCategorias().stream().map(Category::getNombre).toList())
                 .especialidades(p.getEspecialidades().stream().map(Category::getNombre).toList())
