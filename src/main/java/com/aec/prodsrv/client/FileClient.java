@@ -153,15 +153,26 @@ public class FileClient {
                 .block();
     }
 
-    public List<FileInfoDto> getMetaByProduct(Long productId) {
-        String token = getAuthToken();
-        return webClient.get()
-                .uri("/api/files/meta/product/{id}", productId)
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
-                .retrieve()
-                .bodyToFlux(FileInfoDto.class)
-                .collectList()
-                .block();
+public List<FileInfoDto> getMetaByProduct(Long productId) {
+    String token = getAuthToken(); // ya lo tienes en el cliente
+
+    String uri = "/api/files/meta/product/{productId}";
+    String raw = webClient.get()
+            .uri(uri, productId)
+            .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+            .retrieve()
+            .bodyToMono(String.class)
+            .block();
+
+    try {
+        return mapper.readValue(
+                raw,
+                mapper.getTypeFactory().constructCollectionType(List.class, FileInfoDto.class)
+        );
+    } catch (Exception ex) {
+        log.warn("No se pudo parsear metadatos de archivos para productId {}: {}", productId, ex.getMessage());
+        return List.of();
     }
+}
 
 }
