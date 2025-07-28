@@ -66,7 +66,7 @@ public class ProductService {
         return toDto(repo.save(p));
     }
 
-    public ProductDto create(@Valid ProductDto dto,
+public ProductDto create(@Valid ProductDto dto,
                              MultipartFile foto,
                              List<MultipartFile> archivosAut,
                              String uploader) {
@@ -85,9 +85,10 @@ public class ProductService {
                 .especialidades(specs)
                 .build();
 
+        // Primer guardado para obtener el ID y poner la entidad en el contexto de persistencia
         Product saved = repo.save(p);
         Long productId = saved.getIdProducto();
-        log.info("Producto guardado con ID: {}", productId);
+        log.info("Producto guardado inicialmente con ID: {}", productId);
 
         // Foto
         if (foto != null && !foto.isEmpty()) {
@@ -95,6 +96,7 @@ public class ProductService {
                 FileInfoDto res = fileClient.uploadProductFile(foto, uploader, productId);
                 log.info("Respuesta subida foto: {}", res != null ? res.getDriveFileId() : "null");
                 if (res != null && res.getDriveFileId() != null) {
+                    // Actualiza la misma instancia 'saved' que ya está en el contexto de persistencia
                     saved.setFotografiaProd(res.getDriveFileId());
                 } else {
                     log.warn("Upload foto devolvió respuesta nula o sin driveFileId para producto {}", productId);
@@ -127,9 +129,8 @@ public class ProductService {
             saved.setArchivosAut(driveIds);
         }
 
-        // Persistir cambios de ficheros
-        saved = repo.save(saved);
-        return toDto(saved);
+
+        return toDto(saved); 
     }
 
     public ProductDto update(Long id,
