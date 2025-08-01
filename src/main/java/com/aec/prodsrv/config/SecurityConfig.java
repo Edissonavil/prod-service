@@ -87,7 +87,7 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration cfg = new CorsConfiguration();
 
-        cfg.setAllowedOrigins(List.of("https://gateway-production-129e.up.railway.app","https://aecf-production.up.railway.app"));
+        cfg.setAllowedOrigins(List.of("https://gateway-production-129e.up.railway.app","https://aecf-production.up.railway.app","https://aecblock.com"));
         cfg.setAllowedMethods(List.of("GET","POST","PUT","DELETE","OPTIONS"));
         cfg.setAllowedHeaders(List.of("*"));
         cfg.setAllowCredentials(true);
