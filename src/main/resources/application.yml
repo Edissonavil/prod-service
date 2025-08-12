@@ -1,7 +1,8 @@
 spring:
   application:
     name: aec-prod
-    mail:
+
+  mail:
     host: ${MAIL_HOST}
     port: ${MAIL_PORT:587}
     username: ${MAIL_USER}
@@ -13,6 +14,7 @@ spring:
       mail.smtp.ssl.enable: false
       mail.smtp.ssl.trust: ${MAIL_HOST}
     default-encoding: UTF-8
+
   docker:
     compose:
       enabled: false
@@ -24,13 +26,12 @@ spring:
       max-file-size: 1000MB
       max-request-size: 1000MB
 
-  # Configuración de la base de datos
   datasource:
     url: jdbc:postgresql://${PGHOST}:${PGPORT}/${PGDATABASE}
     username: ${PGUSER}
     password: ${PGPASSWORD}
     driver-class-name: org.postgresql.Driver
-  
+
   jpa:
     hibernate:
       ddl-auto: ${DDL_AUTO:update}
@@ -60,18 +61,14 @@ gateway:
 
 users:
   service:
-    url: ${USERS_SERVICE_URL:http://users-service.railway.internal:8081/api/users}
+    url: ${USER_SERVICE_URL:http://users-service.railway.internal:8081/api/users}
 
 file:
   upload-dir: ${UPLOAD_DIR:/app/uploads}
 
 logging:
   level:
-    root: DEBUG
-    org.springframework.web: DEBUG
-    org.hibernate: DEBUG
-    org.hibernate.SQL: DEBUG
-    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+    root: INFO
+    org.springframework: INFO
+    org.hibernate: INFO
     com.aec.prodsrv: DEBUG
-    # Agrega logging específico para Feign si usas OpenFeign
-    org.springframework.cloud.openfeign: DEBUG
