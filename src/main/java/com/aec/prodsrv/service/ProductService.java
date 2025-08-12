@@ -417,57 +417,81 @@ public class ProductService {
             return null;
         return originalName.substring(dot + 1).toUpperCase(Locale.ROOT);
     }
+private ProductDto toDto(Product p) {
+    // 1) URLs de fotos desde fotografiaProd (si viene)
+    List<String> fotoUrls = (p.getFotografiaProd() != null && !p.getFotografiaProd().isEmpty())
+            ? p.getFotografiaProd().stream()
+                .map(id -> gatewayBaseUrl + "/api/files/" + p.getIdProducto() + "/" + id)
+                .toList()
+            : List.of();
 
-    private ProductDto toDto(Product p) {
-        List<String> fotoUrls = (p.getFotografiaProd() != null)
-                ? p.getFotografiaProd().stream()
-                        .map(id -> gatewayBaseUrl + "/api/files/" + p.getIdProducto() + "/" + id)
-                        .toList()
-                : List.of();
+    // 2) URLs de archivos autorizados
+    List<String> autUrls = (p.getArchivosAut() != null && !p.getArchivosAut().isEmpty())
+            ? p.getArchivosAut().stream()
+                .map(id -> gatewayBaseUrl + "/api/files/" + p.getIdProducto() + "/" + id)
+                .toList()
+            : List.of();
 
-        List<String> autUrls = (p.getArchivosAut() != null)
-                ? p.getArchivosAut().stream()
-                        .map(id -> gatewayBaseUrl + "/api/files/" + p.getIdProducto() + "/" + id)
-                        .toList()
-                : List.of();
+    // 3) Consultar metadatos una sola vez (sirven para formatos y para fallback de fotos)
+    List<String> formatos = List.of();
+    List<String> imageIdsFromMeta = List.of();
+    try {
+        var metas = fileClient.getMetaByProduct(p.getIdProducto());
+        if (metas != null && !metas.isEmpty()) {
+            // Formatos (no imágenes)
+            formatos = metas.stream()
+                    .filter(m -> m.getFileType() == null || !m.getFileType().startsWith("image/"))
+                    .map(m -> onlyExt(m.getOriginalName()))
+                    .filter(Objects::nonNull)
+                    .distinct()
+                    .toList();
 
-        List<String> formatos = List.of();
-        try {
-            var metas = fileClient.getMetaByProduct(p.getIdProducto());
-            if (metas != null && !metas.isEmpty()) {
-                formatos = metas.stream()
-                        // si NO quieres contar la foto: descarta mime image/*
-                        .filter(m -> m.getFileType() == null || !m.getFileType().startsWith("image/"))
-                        .map(m -> onlyExt(m.getOriginalName()))
-                        .filter(Objects::nonNull)
-                        .distinct()
-                        .toList();
-                log.info("Formatos para producto {}: {}", p.getIdProducto(), formatos);
-            } else {
-                log.info("Metadatos vacíos para producto {}", p.getIdProducto());
-            }
-        } catch (Exception e) {
-            log.warn("No se pudieron obtener formatos para producto {}: {}", p.getIdProducto(), e.getMessage());
+            // Recoger posibles imágenes desde meta (para fallback)
+            imageIdsFromMeta = metas.stream()
+                    .filter(m -> m.getFileType() != null && m.getFileType().startsWith("image/"))
+                    .map(m -> m.getDriveFileId())
+                    .filter(Objects::nonNull)
+                    .toList();
+
+            log.info("Formatos para producto {}: {}", p.getIdProducto(), formatos);
+        } else {
+            log.info("Metadatos vacíos para producto {}", p.getIdProducto());
         }
-
-        return ProductDto.builder()
-                .idProducto(p.getIdProducto())
-                .nombre(p.getNombre())
-                .descripcionProd(p.getDescripcionProd())
-                .precioIndividual(p.getPrecioIndividual())
-                .fotografiaProd(p.getFotografiaProd())
-                .fotografiaUrl(fotoUrls)
-                .archivosAut(p.getArchivosAut())
-                .archivosAutUrls(autUrls)
-                .formatos(formatos)
-                .estado(p.getEstado().name())
-                .categorias(p.getCategorias().stream().map(Category::getNombre).toList())
-                .especialidades(p.getEspecialidades().stream().map(Category::getNombre).toList())
-                .pais(p.getPais())
-                .uploaderUsername(p.getUploaderUsername())
-                .usuarioDecision(p.getUsuarioDecision())
-                .comentario(p.getComentario())
-                .build();
+    } catch (Exception e) {
+        log.warn("No se pudieron obtener metadatos para producto {}: {}", p.getIdProducto(), e.getMessage());
     }
 
+    // 4) Fallback de fotos: si fotografiaProd está vacío, usar las imágenes detectadas por metadatos
+    List<String> fotografiaProdForDto = (p.getFotografiaProd() != null) ? p.getFotografiaProd() : List.of();
+    if ((fotografiaProdForDto == null || fotografiaProdForDto.isEmpty()) && !imageIdsFromMeta.isEmpty()) {
+        // rellenamos en el DTO (no tocamos la entidad ni BD)
+        fotografiaProdForDto = imageIdsFromMeta;
+        // y construimos sus URLs
+        if (fotoUrls.isEmpty()) {
+            fotoUrls = imageIdsFromMeta.stream()
+                    .map(id -> gatewayBaseUrl + "/api/files/" + p.getIdProducto() + "/" + id)
+                    .toList();
+        }
+    }
+
+    return ProductDto.builder()
+            .idProducto(p.getIdProducto())
+            .nombre(p.getNombre())
+            .descripcionProd(p.getDescripcionProd())
+            .precioIndividual(p.getPrecioIndividual())
+            // Importante: mandamos la lista de IDs (sea la original o la de fallback)
+            .fotografiaProd(fotografiaProdForDto)
+            .fotografiaUrl(fotoUrls)
+            .archivosAut(p.getArchivosAut())
+            .archivosAutUrls(autUrls)
+            .formatos(formatos)
+            .estado(p.getEstado().name())
+            .categorias(p.getCategorias().stream().map(Category::getNombre).toList())
+            .especialidades(p.getEspecialidades().stream().map(Category::getNombre).toList())
+            .pais(p.getPais())
+            .uploaderUsername(p.getUploaderUsername())
+            .usuarioDecision(p.getUsuarioDecision())
+            .comentario(p.getComentario())
+            .build();
+}
 }
