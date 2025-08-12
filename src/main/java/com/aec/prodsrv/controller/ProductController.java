@@ -35,10 +35,11 @@ public class ProductController {
     public ResponseEntity<ProductDto> create(
             @RequestPart("dto") @Valid ProductDto dto,
             @RequestPart(value = "foto", required = false) MultipartFile foto,
+            @RequestPart(value = "fotos", required = false) List<MultipartFile> fotos, 
             @RequestPart(value = "archivosAut", required = false) List<MultipartFile> archivosAut,
             @AuthenticationPrincipal Jwt jwt) {
         String uploader = jwt.getSubject();
-        ProductDto created = svc.create(dto, foto, archivosAut, uploader);
+        ProductDto created = svc.create(dto, foto,fotos, archivosAut, uploader);
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
 
@@ -48,10 +49,11 @@ public class ProductController {
             @PathVariable Long id,
             @RequestPart("dto") @Valid ProductDto dto,
             @RequestPart(value = "foto", required = false) MultipartFile foto,
+            @RequestPart(value = "fotos", required = false) List<MultipartFile> fotos, 
             @RequestPart(value = "archivosAut", required = false) List<MultipartFile> archivosAut,
             @AuthenticationPrincipal Jwt jwt) {
         String uploader = jwt.getSubject();
-        ProductDto updated = svc.update(id, dto, foto, archivosAut, uploader);
+        ProductDto updated = svc.update(id, dto, foto,fotos, archivosAut, uploader);
         return ResponseEntity.ok(updated);
     }
 

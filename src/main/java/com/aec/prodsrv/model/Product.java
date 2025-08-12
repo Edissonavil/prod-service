@@ -1,5 +1,6 @@
 // src/main/java/com/aec/prodsrv/model/Product.java
-package com.aec.prodsrv.model; 
+package com.aec.prodsrv.model;
+
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -29,13 +30,13 @@ public class Product {
 
     private Double precioIndividual;
 
-    @Column(name = "fotografia_prod", length = 5000)
-    private String fotografiaProd; // Correcto: almacena el ID de Google Drive
+    @Column(name = "fotografia_prod", length = 50000)
+    @Convert(converter = StringListConverter.class)
+    private List<String> fotografiaProd; // Lista de IDs de Google Drive
 
-    // --- ¡CAMBIO CLAVE AQUÍ! ---
     @Column(name = "archivos_aut", length = 50000)
-    @Convert(converter = StringListConverter.class) // <-- ¡Añade esta línea!
-    private List<String> archivosAut; // Ahora, esta lista se guardará como JSON en la columna 'archivos_aut'
+    @Convert(converter = StringListConverter.class) 
+    private List<String> archivosAut; 
     // ----------------------------
 
     private String pais;
@@ -47,19 +48,11 @@ public class Product {
     private String usuarioDecision;
     private String comentario;
 
-    @ManyToMany(cascade = {CascadeType.PERSIST, CascadeType.MERGE})
-    @JoinTable(
-        name = "product_categories",
-        joinColumns = @JoinColumn(name = "product_id"),
-        inverseJoinColumns = @JoinColumn(name = "category_id")
-    )
+    @ManyToMany(cascade = { CascadeType.PERSIST, CascadeType.MERGE })
+    @JoinTable(name = "product_categories", joinColumns = @JoinColumn(name = "product_id"), inverseJoinColumns = @JoinColumn(name = "category_id"))
     private Set<Category> categorias = new HashSet<>();
 
-    @ManyToMany(cascade = {CascadeType.PERSIST, CascadeType.MERGE})
-    @JoinTable(
-        name = "product_specialties",
-        joinColumns = @JoinColumn(name = "product_id"),
-        inverseJoinColumns = @JoinColumn(name = "specialty_id")
-    )
+    @ManyToMany(cascade = { CascadeType.PERSIST, CascadeType.MERGE })
+    @JoinTable(name = "product_specialties", joinColumns = @JoinColumn(name = "product_id"), inverseJoinColumns = @JoinColumn(name = "specialty_id"))
     private Set<Category> especialidades = new HashSet<>();
 }

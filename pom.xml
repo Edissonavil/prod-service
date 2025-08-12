@@ -113,12 +113,6 @@
             <artifactId>commons-io</artifactId>
             <version>${commons-io.version}</version>
         </dependency>
-        <!-- spring-core ya viene con spring-boot-starter-web, no es necesario explícitamente -->
-        <!-- <dependency>
-            <groupId>org.springframework</groupId>
-            <artifactId>spring-core</artifactId>
-        </dependency> -->
-
         <!-- Lombok -->
         <dependency>
             <groupId>org.projectlombok</groupId>
@@ -162,11 +156,10 @@
             <artifactId>reactor-test</artifactId>
             <scope>test</scope>
         </dependency>
-
-        <!-- Dependencias que ya deberían estar cubiertas por starters o eliminadas si no se usan -->
-        <!-- org.hibernate.validator:hibernate-validator ya está con spring-boot-starter-validation -->
-        <!-- jakarta.persistence:jakarta.persistence-api ya está con spring-boot-starter-data-jpa -->
-
+                <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-mail</artifactId>
+        </dependency>
     </dependencies>
 
     <build>
