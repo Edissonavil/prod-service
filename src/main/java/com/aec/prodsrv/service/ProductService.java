@@ -79,38 +79,28 @@ public class ProductService {
         // === EMAIL AL COLABORADOR ===
         try {
             String uploaderUsername = saved.getUploaderUsername();
-            String to = usersClient.findEmailByUsername(uploaderUsername).orElse(null);
+            var emailOpt = usersClient.findEmailByUsername(uploaderUsername);
+            String to = emailOpt.orElse(null);
+            log.info("[DECIDIR] uploader='{}' -> email='{}'", uploaderUsername, to);
+
+            String portadaUrl = null;
+            if (saved.getFotografiaProd() != null && !saved.getFotografiaProd().isEmpty()) {
+                String first = saved.getFotografiaProd().get(0);
+                portadaUrl = gatewayBaseUrl + "/api/files/" + saved.getIdProducto() + "/" + first;
+            }
+            log.info("[DECIDIR] portadaUrl={}", portadaUrl);
 
             if (to == null || to.isBlank()) {
-                log.warn("No se encontró email para el uploader '{}'; no se envía notificación.", uploaderUsername);
+                log.warn("[DECIDIR] No hay email del colaborador. No se enviará notificación.");
+            } else if (aprobar) {
+                emailService.sendProductApprovedEmail(
+                        to, uploaderUsername, saved.getIdProducto(), saved.getNombre(), portadaUrl, comentario);
             } else {
-                // portada opcional (primera foto)
-                String portadaUrl = null;
-                if (saved.getFotografiaProd() != null && !saved.getFotografiaProd().isEmpty()) {
-                    String first = saved.getFotografiaProd().get(0);
-                    portadaUrl = gatewayBaseUrl + "/api/files/" + saved.getIdProducto() + "/" + first;
-                }
-
-                if (aprobar) {
-                    emailService.sendProductApprovedEmail(
-                            to,
-                            uploaderUsername,
-                            saved.getIdProducto(),
-                            saved.getNombre(),
-                            portadaUrl,
-                            comentario);
-                } else {
-                    // opcional: notificar rechazo
-                    emailService.sendProductRejectedEmail(
-                            to,
-                            uploaderUsername,
-                            saved.getIdProducto(),
-                            saved.getNombre(),
-                            comentario);
-                }
+                emailService.sendProductRejectedEmail(
+                        to, uploaderUsername, saved.getIdProducto(), saved.getNombre(), comentario);
             }
         } catch (Exception e) {
-            log.warn("Fallo al enviar notificación de decisión del producto {}: {}", id, e.getMessage());
+            log.warn("[DECIDIR] Fallo al enviar notificación de decisión del producto {}: {}", id, e.toString());
         }
 
         return toDto(saved);
