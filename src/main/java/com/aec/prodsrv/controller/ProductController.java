@@ -8,6 +8,8 @@ import com.aec.prodsrv.service.ProductService;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,6 +23,7 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
+import java.util.Collections;
 
 @RestController
 @RequestMapping("/api/products")
@@ -29,6 +32,7 @@ public class ProductController {
         private static final Logger log = LoggerFactory.getLogger(ProductController.class); 
 
     private final ProductService svc;
+    private final ObjectMapper objectMapper;
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasAuthority('ROL_COLABORADOR')")
@@ -51,10 +55,24 @@ public class ProductController {
             @RequestPart(value = "foto", required = false) MultipartFile foto,
             @RequestPart(value = "fotos", required = false) List<MultipartFile> fotos, 
             @RequestPart(value = "archivosAut", required = false) List<MultipartFile> archivosAut,
+            @RequestPart(value = "keepFotoIds", required = false) String keepFotoIdsJson,
+            @RequestPart(value = "autKeepUrls", required = false) String autKeepUrlsJson,
             @AuthenticationPrincipal Jwt jwt) {
         String uploader = jwt.getSubject();
-        ProductDto updated = svc.update(id, dto, foto,fotos, archivosAut, uploader);
+        List<String> keepFotoIds = readListOrEmpty(keepFotoIdsJson);
+        List<String> autKeepUrls = readListOrEmpty(autKeepUrlsJson);
+        ProductDto updated = svc.update(id, dto, foto, fotos, archivosAut, keepFotoIds, autKeepUrls, uploader);
         return ResponseEntity.ok(updated);
+    }
+
+    private List<String> readListOrEmpty(String json) {
+        try {
+            if (json == null || json.isBlank()) return Collections.emptyList();
+            return objectMapper.readValue(json, new TypeReference<List<String>>() {});
+        } catch (Exception e) {
+            log.warn("No se pudo parsear lista JSON recibida en multipart: {}", e.getMessage());
+            return Collections.emptyList();
+        }
     }
 
     @DeleteMapping("/{id}")

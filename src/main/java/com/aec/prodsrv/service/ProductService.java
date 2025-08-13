@@ -215,6 +215,8 @@ public class ProductService {
             MultipartFile foto,
             List<MultipartFile> fotos,
             List<MultipartFile> archivosAut,
+            List<String> keepFotoIds,
+            List<String> autKeepUrls,
             String uploader) {
 
         Product p = repo.findById(id)
@@ -224,76 +226,94 @@ public class ProductService {
             throw new SecurityException("Sin permiso");
         }
 
-        // Foto
-        if (fotos != null) {
-            // Borrar fotos anteriores
-            if (p.getFotografiaProd() != null) {
-                for (String oldId : p.getFotografiaProd()) {
-                    try {
-                        fileClient.deleteFile(oldId);
-                    } catch (Exception e) {
-                        log.warn("No se pudo eliminar foto {}", oldId);
-                    }
+        // --------------------------
+        // Fotos (mantener / borrar / subir)
+        // --------------------------
+        List<String> existingFotoIds = (p.getFotografiaProd() != null) ? new ArrayList<>(p.getFotografiaProd())
+                                                                       : new ArrayList<>();
+        // Si no enviaron keep, por seguridad conservamos todas las existentes
+        List<String> keepIds = (keepFotoIds != null && !keepFotoIds.isEmpty())
+                ? new ArrayList<>(keepFotoIds)
+                : new ArrayList<>(existingFotoIds);
+
+        // Borrar las que ya no están en keep
+        for (String oldId : existingFotoIds) {
+            if (!keepIds.contains(oldId)) {
+                try {
+                    fileClient.deleteFile(oldId);
+                } catch (Exception e) {
+                    log.warn("No se pudo eliminar foto {} en Drive: {}", oldId, e.getMessage());
                 }
             }
-            // Subir nuevas
-            List<String> nuevosIds = new ArrayList<>();
+        }
+
+        // Subir nuevas fotos (múltiples)
+        List<String> uploadedFotoIds = new ArrayList<>();
+        if (fotos != null) {
             for (MultipartFile f : fotos) {
-                if (f == null || f.isEmpty())
-                    continue;
+                if (f == null || f.isEmpty()) continue;
                 FileInfoDto res = fileClient.uploadProductFile(f, uploader, id);
                 if (res != null && res.getDriveFileId() != null) {
-                    nuevosIds.add(res.getDriveFileId());
+                    uploadedFotoIds.add(res.getDriveFileId());
                 }
             }
-            p.setFotografiaProd(nuevosIds);
-        } else if (foto != null) {
-            // Compatibilidad
-            if (!foto.isEmpty()) {
-                if (p.getFotografiaProd() != null) {
-                    for (String oldId : p.getFotografiaProd()) {
-                        try {
-                            fileClient.deleteFile(oldId);
-                        } catch (Exception e) {
-                        }
-                    }
+        }
+        // Compatibilidad: una sola 'foto'
+        if (foto != null && !foto.isEmpty()) {
+            FileInfoDto res = fileClient.uploadProductFile(foto, uploader, id);
+            if (res != null && res.getDriveFileId() != null) {
+                uploadedFotoIds.add(res.getDriveFileId());
+            }
+        }
+        // Resultado final de fotos = keep + nuevos
+        List<String> finalFotoIds = new ArrayList<>(keepIds);
+        finalFotoIds.addAll(uploadedFotoIds);
+        p.setFotografiaProd(finalFotoIds.isEmpty() ? null : finalFotoIds);
+ 
+        // ------------------------------------
+        // Archivos AUT (mantener / borrar / subir)
+        // ------------------------------------
+        List<String> existingAutIds = (p.getArchivosAut() != null) ? new ArrayList<>(p.getArchivosAut())
+                                                                   : new ArrayList<>();
+        // autKeepUrls viene como URLs completas del gateway; extraemos el último segmento (driveId).
+        List<String> keepAutIds = new ArrayList<>();
+        if (autKeepUrls != null && !autKeepUrls.isEmpty()) {
+            for (String url : autKeepUrls) {
+                String idFromUrl = extractDriveId(url);
+                if (idFromUrl != null && !idFromUrl.isBlank()) keepAutIds.add(idFromUrl);
+            }
+        } else {
+            // Si no enviaron keep para AUT, conservamos todo lo existente
+            keepAutIds.addAll(existingAutIds);
+        }
+
+        // Borrar AUT que ya no se mantienen
+        for (String oldId : existingAutIds) {
+            if (!keepAutIds.contains(oldId)) {
+                try {
+                    fileClient.deleteFile(oldId);
+                } catch (Exception e) {
+                    log.warn("No se pudo eliminar archivo AUT {} en Drive: {}", oldId, e.getMessage());
                 }
-                FileInfoDto res = fileClient.uploadProductFile(foto, uploader, id);
-                if (res != null && res.getDriveFileId() != null) {
-                    p.setFotografiaProd(new ArrayList<>(List.of(res.getDriveFileId())));
-                }
-            } else {
-                p.setFotografiaProd(null);
             }
         }
 
-        // Archivos autorizados (si el cliente envía la parte, incluso vacía)
+        // Subir nuevos AUT
+        List<String> uploadedAutIds = new ArrayList<>();
         if (archivosAut != null) {
-            if (p.getArchivosAut() != null) {
-                for (String oldId : p.getArchivosAut()) {
-                    try {
-                        fileClient.deleteFile(oldId);
-                    } catch (Exception e) {
-                        log.warn("No se pudo eliminar el archivo antiguo {} para producto {}: {}", oldId, id,
-                                e.getMessage());
-                    }
-                }
-            }
-
-            List<String> nuevos = new ArrayList<>();
             for (MultipartFile mf : archivosAut) {
-                if (mf == null || mf.isEmpty())
-                    continue;
+                if (mf == null || mf.isEmpty()) continue;
                 FileInfoDto res = fileClient.uploadProductFile(mf, uploader, id);
                 if (res != null && res.getDriveFileId() != null) {
-                    nuevos.add(res.getDriveFileId());
+                    uploadedAutIds.add(res.getDriveFileId());
                 } else {
-                    log.warn("Subida de archivo en update devolvió respuesta nula o sin driveFileId. original={}",
-                            mf.getOriginalFilename());
-                }
+                    log.warn("Subida de archivo AUT sin driveFileId. original={}", mf.getOriginalFilename());                }
             }
-            p.setArchivosAut(nuevos);
         }
+        List<String> finalAutIds = new ArrayList<>(keepAutIds);
+        finalAutIds.addAll(uploadedAutIds);
+        p.setArchivosAut(finalAutIds.isEmpty() ? null : finalAutIds);
+ 
 
         // Resto de campos
         p.setNombre(dto.getNombre());
@@ -308,6 +328,12 @@ public class ProductService {
         }
 
         return toDto(repo.save(p));
+    }
+
+     private String extractDriveId(String urlOrId) {
+        if (urlOrId == null) return null;
+        int idx = urlOrId.lastIndexOf('/');
+        return (idx >= 0) ? urlOrId.substring(idx + 1) : urlOrId;
     }
 
     public void deleteProduct(Long id, String uploader) {
