@@ -1,6 +1,9 @@
 package com.aec.prodsrv.config;
 
+import java.time.Duration;
+
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.client.RestTemplate;
@@ -23,5 +26,19 @@ public class AppConfig {
         return builder
             .baseUrl(baseUrl)                      
             .build();
+    }
+
+     @Bean(name = "usersRestTemplate")
+    public RestTemplate usersRestTemplate(
+            RestTemplateBuilder builder,
+            @Value("${users.service.url}") String usersServiceRootUri,
+            @Value("${http.client.connect-timeout-ms:5000}") long connectTimeoutMs,
+            @Value("${http.client.read-timeout-ms:5000}") long readTimeoutMs) {
+
+        return builder
+                .rootUri(usersServiceRootUri.trim())
+                .setConnectTimeout(Duration.ofMillis(connectTimeoutMs))
+                .setReadTimeout(Duration.ofMillis(readTimeoutMs))
+                .build();
     }
 }

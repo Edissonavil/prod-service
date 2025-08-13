@@ -66,6 +66,11 @@ users:
 file:
   upload-dir: ${UPLOAD_DIR:/app/uploads}
 
+http:
+  client:
+    connect-timeout-ms: ${HTTP_CONNECT_TIMEOUT_MS:5000}
+    read-timeout-ms: ${HTTP_READ_TIMEOUT_MS:5000}
+    
 logging:
   level:
     root: INFO
