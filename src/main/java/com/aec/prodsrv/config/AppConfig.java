@@ -18,10 +18,10 @@ public class AppConfig {
     public WebClient webClient(
         WebClient.Builder builder,
         @Value("${filesrv.url:\"https://aecf-production.up.railway.app\",\n" + //
-                        "      \"https://aecblock.com\"}") String baseUrl  // <-- fallback
+                        "      \"https://aecblock.com\"}") String baseUrl  
         ) {
         return builder
-            .baseUrl(baseUrl)                       // ya es un String, no "${…}"
+            .baseUrl(baseUrl)                      
             .build();
     }
 }

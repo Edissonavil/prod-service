@@ -1,6 +1,7 @@
 package com.aec.prodsrv.service;
 
 import com.aec.prodsrv.client.FileClient;
+import com.aec.prodsrv.client.UsersClient;
 import com.aec.prodsrv.client.dto.FileInfoDto;
 import com.aec.prodsrv.dto.ProductDto;
 import com.aec.prodsrv.model.Category;
@@ -9,6 +10,7 @@ import com.aec.prodsrv.model.ProductStatus;
 import com.aec.prodsrv.repository.CategoryRepository;
 import com.aec.prodsrv.repository.ProductRepository;
 import com.aec.prodsrv.service.EmailService;
+import com.aec.prodsrv.client.UsersClient;
 import jakarta.annotation.PostConstruct;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.transaction.Transactional;
@@ -34,6 +36,7 @@ public class ProductService {
     private final CategoryRepository catRepo;
     private final FileClient fileClient;
     private final EmailService emailService;
+    private final UsersClient usersClient;
 
     @Value("${file-service.base-url}")
     private String fileServiceBaseUrl; // uso interno (S2S) si lo necesitas
@@ -44,11 +47,13 @@ public class ProductService {
     public ProductService(ProductRepository repo,
             CategoryRepository catRepo,
             FileClient fileClient,
-            EmailService emailService) {
+            EmailService emailService,
+            UsersClient usersClient) {
         this.repo = repo;
         this.catRepo = catRepo;
         this.fileClient = fileClient;
         this.emailService = emailService;
+        this.usersClient = usersClient;
     }
 
     @PostConstruct
@@ -64,10 +69,51 @@ public class ProductService {
     public ProductDto decidir(Long id, boolean aprobar, String comentario, String adminUsername) {
         Product p = repo.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Producto no encontrado: " + id));
+
         p.setEstado(aprobar ? ProductStatus.APROBADO : ProductStatus.RECHAZADO);
         p.setUsuarioDecision(adminUsername);
         p.setComentario(comentario);
-        return toDto(repo.save(p));
+
+        Product saved = repo.save(p);
+
+        // === EMAIL AL COLABORADOR ===
+        try {
+            String uploaderUsername = saved.getUploaderUsername();
+            String to = usersClient.findEmailByUsername(uploaderUsername).orElse(null);
+
+            if (to == null || to.isBlank()) {
+                log.warn("No se encontró email para el uploader '{}'; no se envía notificación.", uploaderUsername);
+            } else {
+                // portada opcional (primera foto)
+                String portadaUrl = null;
+                if (saved.getFotografiaProd() != null && !saved.getFotografiaProd().isEmpty()) {
+                    String first = saved.getFotografiaProd().get(0);
+                    portadaUrl = gatewayBaseUrl + "/api/files/" + saved.getIdProducto() + "/" + first;
+                }
+
+                if (aprobar) {
+                    emailService.sendProductApprovedEmail(
+                            to,
+                            uploaderUsername,
+                            saved.getIdProducto(),
+                            saved.getNombre(),
+                            portadaUrl,
+                            comentario);
+                } else {
+                    // opcional: notificar rechazo
+                    emailService.sendProductRejectedEmail(
+                            to,
+                            uploaderUsername,
+                            saved.getIdProducto(),
+                            saved.getNombre(),
+                            comentario);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Fallo al enviar notificación de decisión del producto {}: {}", id, e.getMessage());
+        }
+
+        return toDto(saved);
     }
 
     public ProductDto create(@Valid ProductDto dto,
@@ -230,7 +276,7 @@ public class ProductService {
         // Fotos (mantener / borrar / subir)
         // --------------------------
         List<String> existingFotoIds = (p.getFotografiaProd() != null) ? new ArrayList<>(p.getFotografiaProd())
-                                                                       : new ArrayList<>();
+                : new ArrayList<>();
         // Si no enviaron keep, por seguridad conservamos todas las existentes
         List<String> keepIds = (keepFotoIds != null && !keepFotoIds.isEmpty())
                 ? new ArrayList<>(keepFotoIds)
@@ -251,7 +297,8 @@ public class ProductService {
         List<String> uploadedFotoIds = new ArrayList<>();
         if (fotos != null) {
             for (MultipartFile f : fotos) {
-                if (f == null || f.isEmpty()) continue;
+                if (f == null || f.isEmpty())
+                    continue;
                 FileInfoDto res = fileClient.uploadProductFile(f, uploader, id);
                 if (res != null && res.getDriveFileId() != null) {
                     uploadedFotoIds.add(res.getDriveFileId());
@@ -269,18 +316,20 @@ public class ProductService {
         List<String> finalFotoIds = new ArrayList<>(keepIds);
         finalFotoIds.addAll(uploadedFotoIds);
         p.setFotografiaProd(finalFotoIds.isEmpty() ? null : finalFotoIds);
- 
+
         // ------------------------------------
         // Archivos AUT (mantener / borrar / subir)
         // ------------------------------------
         List<String> existingAutIds = (p.getArchivosAut() != null) ? new ArrayList<>(p.getArchivosAut())
-                                                                   : new ArrayList<>();
-        // autKeepUrls viene como URLs completas del gateway; extraemos el último segmento (driveId).
+                : new ArrayList<>();
+        // autKeepUrls viene como URLs completas del gateway; extraemos el último
+        // segmento (driveId).
         List<String> keepAutIds = new ArrayList<>();
         if (autKeepUrls != null && !autKeepUrls.isEmpty()) {
             for (String url : autKeepUrls) {
                 String idFromUrl = extractDriveId(url);
-                if (idFromUrl != null && !idFromUrl.isBlank()) keepAutIds.add(idFromUrl);
+                if (idFromUrl != null && !idFromUrl.isBlank())
+                    keepAutIds.add(idFromUrl);
             }
         } else {
             // Si no enviaron keep para AUT, conservamos todo lo existente
@@ -302,18 +351,19 @@ public class ProductService {
         List<String> uploadedAutIds = new ArrayList<>();
         if (archivosAut != null) {
             for (MultipartFile mf : archivosAut) {
-                if (mf == null || mf.isEmpty()) continue;
+                if (mf == null || mf.isEmpty())
+                    continue;
                 FileInfoDto res = fileClient.uploadProductFile(mf, uploader, id);
                 if (res != null && res.getDriveFileId() != null) {
                     uploadedAutIds.add(res.getDriveFileId());
                 } else {
-                    log.warn("Subida de archivo AUT sin driveFileId. original={}", mf.getOriginalFilename());                }
+                    log.warn("Subida de archivo AUT sin driveFileId. original={}", mf.getOriginalFilename());
+                }
             }
         }
         List<String> finalAutIds = new ArrayList<>(keepAutIds);
         finalAutIds.addAll(uploadedAutIds);
         p.setArchivosAut(finalAutIds.isEmpty() ? null : finalAutIds);
- 
 
         // Resto de campos
         p.setNombre(dto.getNombre());
@@ -330,8 +380,9 @@ public class ProductService {
         return toDto(repo.save(p));
     }
 
-     private String extractDriveId(String urlOrId) {
-        if (urlOrId == null) return null;
+    private String extractDriveId(String urlOrId) {
+        if (urlOrId == null)
+            return null;
         int idx = urlOrId.lastIndexOf('/');
         return (idx >= 0) ? urlOrId.substring(idx + 1) : urlOrId;
     }
@@ -443,81 +494,84 @@ public class ProductService {
             return null;
         return originalName.substring(dot + 1).toUpperCase(Locale.ROOT);
     }
-private ProductDto toDto(Product p) {
-    // 1) URLs de fotos desde fotografiaProd (si viene)
-    List<String> fotoUrls = (p.getFotografiaProd() != null && !p.getFotografiaProd().isEmpty())
-            ? p.getFotografiaProd().stream()
-                .map(id -> gatewayBaseUrl + "/api/files/" + p.getIdProducto() + "/" + id)
-                .toList()
-            : List.of();
 
-    // 2) URLs de archivos autorizados
-    List<String> autUrls = (p.getArchivosAut() != null && !p.getArchivosAut().isEmpty())
-            ? p.getArchivosAut().stream()
-                .map(id -> gatewayBaseUrl + "/api/files/" + p.getIdProducto() + "/" + id)
-                .toList()
-            : List.of();
+    private ProductDto toDto(Product p) {
+        // 1) URLs de fotos desde fotografiaProd (si viene)
+        List<String> fotoUrls = (p.getFotografiaProd() != null && !p.getFotografiaProd().isEmpty())
+                ? p.getFotografiaProd().stream()
+                        .map(id -> gatewayBaseUrl + "/api/files/" + p.getIdProducto() + "/" + id)
+                        .toList()
+                : List.of();
 
-    // 3) Consultar metadatos una sola vez (sirven para formatos y para fallback de fotos)
-    List<String> formatos = List.of();
-    List<String> imageIdsFromMeta = List.of();
-    try {
-        var metas = fileClient.getMetaByProduct(p.getIdProducto());
-        if (metas != null && !metas.isEmpty()) {
-            // Formatos (no imágenes)
-            formatos = metas.stream()
-                    .filter(m -> m.getFileType() == null || !m.getFileType().startsWith("image/"))
-                    .map(m -> onlyExt(m.getOriginalName()))
-                    .filter(Objects::nonNull)
-                    .distinct()
-                    .toList();
+        // 2) URLs de archivos autorizados
+        List<String> autUrls = (p.getArchivosAut() != null && !p.getArchivosAut().isEmpty())
+                ? p.getArchivosAut().stream()
+                        .map(id -> gatewayBaseUrl + "/api/files/" + p.getIdProducto() + "/" + id)
+                        .toList()
+                : List.of();
 
-            // Recoger posibles imágenes desde meta (para fallback)
-            imageIdsFromMeta = metas.stream()
-                    .filter(m -> m.getFileType() != null && m.getFileType().startsWith("image/"))
-                    .map(m -> m.getDriveFileId())
-                    .filter(Objects::nonNull)
-                    .toList();
+        // 3) Consultar metadatos una sola vez (sirven para formatos y para fallback de
+        // fotos)
+        List<String> formatos = List.of();
+        List<String> imageIdsFromMeta = List.of();
+        try {
+            var metas = fileClient.getMetaByProduct(p.getIdProducto());
+            if (metas != null && !metas.isEmpty()) {
+                // Formatos (no imágenes)
+                formatos = metas.stream()
+                        .filter(m -> m.getFileType() == null || !m.getFileType().startsWith("image/"))
+                        .map(m -> onlyExt(m.getOriginalName()))
+                        .filter(Objects::nonNull)
+                        .distinct()
+                        .toList();
 
-            log.info("Formatos para producto {}: {}", p.getIdProducto(), formatos);
-        } else {
-            log.info("Metadatos vacíos para producto {}", p.getIdProducto());
+                // Recoger posibles imágenes desde meta (para fallback)
+                imageIdsFromMeta = metas.stream()
+                        .filter(m -> m.getFileType() != null && m.getFileType().startsWith("image/"))
+                        .map(m -> m.getDriveFileId())
+                        .filter(Objects::nonNull)
+                        .toList();
+
+                log.info("Formatos para producto {}: {}", p.getIdProducto(), formatos);
+            } else {
+                log.info("Metadatos vacíos para producto {}", p.getIdProducto());
+            }
+        } catch (Exception e) {
+            log.warn("No se pudieron obtener metadatos para producto {}: {}", p.getIdProducto(), e.getMessage());
         }
-    } catch (Exception e) {
-        log.warn("No se pudieron obtener metadatos para producto {}: {}", p.getIdProducto(), e.getMessage());
-    }
 
-    // 4) Fallback de fotos: si fotografiaProd está vacío, usar las imágenes detectadas por metadatos
-    List<String> fotografiaProdForDto = (p.getFotografiaProd() != null) ? p.getFotografiaProd() : List.of();
-    if ((fotografiaProdForDto == null || fotografiaProdForDto.isEmpty()) && !imageIdsFromMeta.isEmpty()) {
-        // rellenamos en el DTO (no tocamos la entidad ni BD)
-        fotografiaProdForDto = imageIdsFromMeta;
-        // y construimos sus URLs
-        if (fotoUrls.isEmpty()) {
-            fotoUrls = imageIdsFromMeta.stream()
-                    .map(id -> gatewayBaseUrl + "/api/files/" + p.getIdProducto() + "/" + id)
-                    .toList();
+        // 4) Fallback de fotos: si fotografiaProd está vacío, usar las imágenes
+        // detectadas por metadatos
+        List<String> fotografiaProdForDto = (p.getFotografiaProd() != null) ? p.getFotografiaProd() : List.of();
+        if ((fotografiaProdForDto == null || fotografiaProdForDto.isEmpty()) && !imageIdsFromMeta.isEmpty()) {
+            // rellenamos en el DTO (no tocamos la entidad ni BD)
+            fotografiaProdForDto = imageIdsFromMeta;
+            // y construimos sus URLs
+            if (fotoUrls.isEmpty()) {
+                fotoUrls = imageIdsFromMeta.stream()
+                        .map(id -> gatewayBaseUrl + "/api/files/" + p.getIdProducto() + "/" + id)
+                        .toList();
+            }
         }
-    }
 
-    return ProductDto.builder()
-            .idProducto(p.getIdProducto())
-            .nombre(p.getNombre())
-            .descripcionProd(p.getDescripcionProd())
-            .precioIndividual(p.getPrecioIndividual())
-            // Importante: mandamos la lista de IDs (sea la original o la de fallback)
-            .fotografiaProd(fotografiaProdForDto)
-            .fotografiaUrl(fotoUrls)
-            .archivosAut(p.getArchivosAut())
-            .archivosAutUrls(autUrls)
-            .formatos(formatos)
-            .estado(p.getEstado().name())
-            .categorias(p.getCategorias().stream().map(Category::getNombre).toList())
-            .especialidades(p.getEspecialidades().stream().map(Category::getNombre).toList())
-            .pais(p.getPais())
-            .uploaderUsername(p.getUploaderUsername())
-            .usuarioDecision(p.getUsuarioDecision())
-            .comentario(p.getComentario())
-            .build();
-}
+        return ProductDto.builder()
+                .idProducto(p.getIdProducto())
+                .nombre(p.getNombre())
+                .descripcionProd(p.getDescripcionProd())
+                .precioIndividual(p.getPrecioIndividual())
+                // Importante: mandamos la lista de IDs (sea la original o la de fallback)
+                .fotografiaProd(fotografiaProdForDto)
+                .fotografiaUrl(fotoUrls)
+                .archivosAut(p.getArchivosAut())
+                .archivosAutUrls(autUrls)
+                .formatos(formatos)
+                .estado(p.getEstado().name())
+                .categorias(p.getCategorias().stream().map(Category::getNombre).toList())
+                .especialidades(p.getEspecialidades().stream().map(Category::getNombre).toList())
+                .pais(p.getPais())
+                .uploaderUsername(p.getUploaderUsername())
+                .usuarioDecision(p.getUsuarioDecision())
+                .comentario(p.getComentario())
+                .build();
+    }
 }

@@ -95,4 +95,59 @@ public class EmailService {
         sendHtmlEmail(adminEmailRecipient, subject, html); // reutiliza tu método existente
     }
 
+       public void sendProductApprovedEmail(String toEmail,
+                                         String uploaderUsername,
+                                         Long productId,
+                                         String productName,
+                                         String portadaUrlOpcional,
+                                         String comentarioAdminOpcional) {
+        String subject = "✅ Tu producto ha sido APROBADO";
+        String portadaHtml = (portadaUrlOpcional == null || portadaUrlOpcional.isBlank())
+                ? "<em>Sin portada</em>"
+                : "<a href='" + portadaUrlOpcional + "' target='_blank'>Ver portada</a>";
+
+        String comentarioHtml = (comentarioAdminOpcional == null || comentarioAdminOpcional.isBlank())
+                ? ""
+                : ("<p><strong>Comentario del administrador:</strong><br/>" + comentarioAdminOpcional + "</p>");
+
+        String html = """
+            <html>
+              <body style="font-family: Arial, sans-serif; line-height:1.6;">
+                <h2>¡Felicidades %s!</h2>
+                <p>Tu producto <strong>%s</strong> (ID: %d) fue <strong>aprobado</strong> y ya puede publicarse en el marketplace.</p>
+                <p>%s</p>
+                <p>%s</p>
+                <p>Gracias por crear en AECBlock.</p>
+              </body>
+            </html>
+        """.formatted(uploaderUsername, productName, productId, portadaHtml, comentarioHtml);
+
+        sendHtmlEmail(toEmail, subject, html);
+    }
+
+    // === NUEVO: rechazado (opcional) ===
+    public void sendProductRejectedEmail(String toEmail,
+                                         String uploaderUsername,
+                                         Long productId,
+                                         String productName,
+                                         String comentarioAdminOpcional) {
+        String subject = "❌ Tu producto fue RECHAZADO";
+        String comentarioHtml = (comentarioAdminOpcional == null || comentarioAdminOpcional.isBlank())
+                ? "<em>Sin comentarios adicionales.</em>"
+                : ("<strong>Motivo:</strong><br/>" + comentarioAdminOpcional);
+
+        String html = """
+            <html>
+              <body style="font-family: Arial, sans-serif; line-height:1.6;">
+                <h2>Hola %s</h2>
+                <p>Tu producto <strong>%s</strong> (ID: %d) fue <strong>rechazado</strong>.</p>
+                <p>%s</p>
+                <p>Puedes revisarlo, ajustar y reenviarlo para una nueva evaluación.</p>
+              </body>
+            </html>
+        """.formatted(uploaderUsername, productName, productId, comentarioHtml);
+
+        sendHtmlEmail(toEmail, subject, html);
+    }
+
 }
