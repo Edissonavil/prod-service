@@ -2,13 +2,10 @@ package com.aec.prodsrv.service;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value; // Para inyectar el correo del admin desde properties
-import org.springframework.mail.MailException;
-import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 
-import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 
 import java.util.List;
@@ -25,12 +22,8 @@ public class EmailService {
     private JavaMailSender mailSender;
 
     // Inyecta el correo del administrador desde application.yml/properties
-    @Value("${admin.email.recipient:support@aecblock.com}")
-    private String adminEmailRecipient;
-
-    // Inyecta el correo del remitente desde application.yml/properties
-    @Value("${admin.email.sender:support@aecblock.com}")
-    private String senderEmail;
+    @Value("${admin.email")
+    private String adminEmail;
 
     private void sendHtmlEmail(String toEmail, String subject, String htmlContent) {
         if (toEmail == null || toEmail.isBlank()) {
@@ -40,12 +33,12 @@ public class EmailService {
         try {
             MimeMessage msg = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(msg, "utf-8");
-            helper.setFrom(senderEmail); // debe coincidir con MAIL_USER
+            helper.setFrom(adminEmail); // debe coincidir con MAIL_USER
             helper.setTo(toEmail);
             helper.setSubject(subject);
             helper.setText(htmlContent, true);
 
-            log.info("[MAIL] Intentando envío -> to='{}', from='{}', subject='{}'", toEmail, senderEmail, subject);
+            log.info("[MAIL] Intentando envío -> to='{}', from='{}', subject='{}'", toEmail, adminEmail, subject);
             mailSender.send(msg);
             log.info("[MAIL] OK -> Enviado a '{}'", toEmail);
 
@@ -96,7 +89,7 @@ public class EmailService {
                     </html>
                 """.formatted(uploaderUsername, productId, productName, cats, specs, fotosHtml.toString());
 
-        sendHtmlEmail(adminEmailRecipient, subject, html); // reutiliza tu método existente
+        sendHtmlEmail(adminEmail, subject, html); // reutiliza tu método existente
     }
 
     public void sendProductApprovedEmail(String toEmail,
