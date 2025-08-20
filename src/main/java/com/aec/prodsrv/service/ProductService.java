@@ -262,15 +262,18 @@ public class ProductService {
             throw new SecurityException("Sin permiso");
         }
 
+        boolean esAprobado = p.getEstado() == ProductStatus.APROBADO;
+
         // --------------------------
-        // Fotos (mantener / borrar / subir)
+        // FOTOS (mantener / borrar / subir) -> PERMITIDO SIEMPRE
         // --------------------------
-        List<String> existingFotoIds = (p.getFotografiaProd() != null) ? new ArrayList<>(p.getFotografiaProd())
+        List<String> existingFotoIds = (p.getFotografiaProd() != null)
+                ? new ArrayList<>(p.getFotografiaProd())
                 : new ArrayList<>();
-        // Si no enviaron keep, por seguridad conservamos todas las existentes
+
         List<String> keepIds = (keepFotoIds != null && !keepFotoIds.isEmpty())
                 ? new ArrayList<>(keepFotoIds)
-                : new ArrayList<>(existingFotoIds);
+                : new ArrayList<>(existingFotoIds); // si no envían keep, conservamos
 
         // Borrar las que ya no están en keep
         for (String oldId : existingFotoIds) {
@@ -302,69 +305,81 @@ public class ProductService {
                 uploadedFotoIds.add(res.getDriveFileId());
             }
         }
+
         // Resultado final de fotos = keep + nuevos
         List<String> finalFotoIds = new ArrayList<>(keepIds);
         finalFotoIds.addAll(uploadedFotoIds);
         p.setFotografiaProd(finalFotoIds.isEmpty() ? null : finalFotoIds);
 
         // ------------------------------------
-        // Archivos AUT (mantener / borrar / subir)
+        // ARCHIVOS AUTORIZADOS -> **NO PERMITIDO** si está APROBADO
         // ------------------------------------
-        List<String> existingAutIds = (p.getArchivosAut() != null) ? new ArrayList<>(p.getArchivosAut())
-                : new ArrayList<>();
-        // autKeepUrls viene como URLs completas del gateway; extraemos el último
-        // segmento (driveId).
-        List<String> keepAutIds = new ArrayList<>();
-        if (autKeepUrls != null && !autKeepUrls.isEmpty()) {
-            for (String url : autKeepUrls) {
-                String idFromUrl = extractDriveId(url);
-                if (idFromUrl != null && !idFromUrl.isBlank())
-                    keepAutIds.add(idFromUrl);
+        if (!esAprobado) {
+            List<String> existingAutIds = (p.getArchivosAut() != null)
+                    ? new ArrayList<>(p.getArchivosAut())
+                    : new ArrayList<>();
+
+            List<String> keepAutIds = new ArrayList<>();
+            if (autKeepUrls != null && !autKeepUrls.isEmpty()) {
+                for (String url : autKeepUrls) {
+                    String idFromUrl = extractDriveId(url);
+                    if (idFromUrl != null && !idFromUrl.isBlank())
+                        keepAutIds.add(idFromUrl);
+                }
+            } else {
+                keepAutIds.addAll(existingAutIds);
             }
+
+            for (String oldId : existingAutIds) {
+                if (!keepAutIds.contains(oldId)) {
+                    try {
+                        fileClient.deleteFile(oldId);
+                    } catch (Exception e) {
+                        log.warn("No se pudo eliminar archivo AUT {} en Drive: {}", oldId, e.getMessage());
+                    }
+                }
+            }
+
+            List<String> uploadedAutIds = new ArrayList<>();
+            if (archivosAut != null) {
+                for (MultipartFile mf : archivosAut) {
+                    if (mf == null || mf.isEmpty())
+                        continue;
+                    FileInfoDto res = fileClient.uploadProductFile(mf, uploader, id);
+                    if (res != null && res.getDriveFileId() != null) {
+                        uploadedAutIds.add(res.getDriveFileId());
+                    } else {
+                        log.warn("Subida de archivo AUT sin driveFileId. original={}", mf.getOriginalFilename());
+                    }
+                }
+            }
+            List<String> finalAutIds = new ArrayList<>(keepAutIds);
+            finalAutIds.addAll(uploadedAutIds);
+            p.setArchivosAut(finalAutIds.isEmpty() ? null : finalAutIds);
         } else {
-            // Si no enviaron keep para AUT, conservamos todo lo existente
-            keepAutIds.addAll(existingAutIds);
+            // Si está APROBADO, ignoramos cambios sobre archivos autorizados (se mantienen
+            // tal cual)
+            log.info("[UPDATE] Producto {} está APROBADO: cambios en archivos AUT ignorados", id);
         }
 
-        // Borrar AUT que ya no se mantienen
-        for (String oldId : existingAutIds) {
-            if (!keepAutIds.contains(oldId)) {
-                try {
-                    fileClient.deleteFile(oldId);
-                } catch (Exception e) {
-                    log.warn("No se pudo eliminar archivo AUT {} en Drive: {}", oldId, e.getMessage());
-                }
-            }
-        }
-
-        // Subir nuevos AUT
-        List<String> uploadedAutIds = new ArrayList<>();
-        if (archivosAut != null) {
-            for (MultipartFile mf : archivosAut) {
-                if (mf == null || mf.isEmpty())
-                    continue;
-                FileInfoDto res = fileClient.uploadProductFile(mf, uploader, id);
-                if (res != null && res.getDriveFileId() != null) {
-                    uploadedAutIds.add(res.getDriveFileId());
-                } else {
-                    log.warn("Subida de archivo AUT sin driveFileId. original={}", mf.getOriginalFilename());
-                }
-            }
-        }
-        List<String> finalAutIds = new ArrayList<>(keepAutIds);
-        finalAutIds.addAll(uploadedAutIds);
-        p.setArchivosAut(finalAutIds.isEmpty() ? null : finalAutIds);
-
-        // Resto de campos
+        // ------------------------------------
+        // CAMPOS EDITABLES
+        // ------------------------------------
         p.setNombre(dto.getNombre());
         p.setDescripcionProd(dto.getDescripcionProd());
         p.setPrecioIndividual(dto.getPrecioIndividual());
-        p.setPais(dto.getPais());
-        if (dto.getCategorias() != null) {
-            p.setCategorias(namesToCategorySet(dto.getCategorias()));
-        }
-        if (dto.getEspecialidades() != null) {
-            p.setEspecialidades(namesToCategorySet(dto.getEspecialidades()));
+
+        if (!esAprobado) {
+            // Solo si NO está aprobado, permitimos cambiar pais/categorías/especialidades
+            p.setPais(dto.getPais());
+            if (dto.getCategorias() != null) {
+                p.setCategorias(namesToCategorySet(dto.getCategorias()));
+            }
+            if (dto.getEspecialidades() != null) {
+                p.setEspecialidades(namesToCategorySet(dto.getEspecialidades()));
+            }
+        } else {
+            log.info("[UPDATE] Producto {} está APROBADO: se ignoran cambios en país/categorías/especialidades", id);
         }
 
         return toDto(repo.save(p));
