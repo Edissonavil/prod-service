@@ -19,26 +19,31 @@ public class AppConfig {
 
     @Bean
     public WebClient webClient(
-        WebClient.Builder builder,
-        @Value("${filesrv.url:\"https://aecf-production.up.railway.app\",\n" + //
-                        "      \"https://aecblock.com\"}") String baseUrl  
-        ) {
+            WebClient.Builder builder,
+            @Value("${filesrv.url:\"https://aecf-production.up.railway.app\",\n" + //
+                    "      \"https://aecblock.com\"}") String baseUrl) {
         return builder
-            .baseUrl(baseUrl)                      
-            .build();
+                .baseUrl(baseUrl)
+                .build();
     }
 
-     @Bean(name = "usersRestTemplate")
+    @Bean(name = "usersRestTemplate")
     public RestTemplate usersRestTemplate(
             RestTemplateBuilder builder,
             @Value("${users.service.url}") String usersServiceRootUri,
             @Value("${http.client.connect-timeout-ms:5000}") long connectTimeoutMs,
             @Value("${http.client.read-timeout-ms:5000}") long readTimeoutMs) {
 
+        String root = usersServiceRootUri.trim();
+        if (!root.startsWith("http://") && !root.startsWith("https://")) {
+            root = "http://" + root;
+        }
+
         return builder
-                .rootUri(usersServiceRootUri.trim())
+                .rootUri(root)
                 .setConnectTimeout(Duration.ofMillis(connectTimeoutMs))
                 .setReadTimeout(Duration.ofMillis(readTimeoutMs))
                 .build();
     }
+
 }

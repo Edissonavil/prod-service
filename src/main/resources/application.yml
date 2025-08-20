@@ -14,8 +14,6 @@ spring:
       mail.smtp.ssl.enable: false
       mail.smtp.ssl.trust: ${MAIL_HOST}
     default-encoding: UTF-8
-  admin:
-    email: ${ADMIN_EMAIL}
     
   docker:
     compose:
@@ -46,7 +44,9 @@ spring:
           batch_size: 20
         order_inserts: true
         order_updates: true
-
+  admin:
+    email: ${ADMIN_EMAIL}
+    
 server:
   port: ${PORT:8080}
 

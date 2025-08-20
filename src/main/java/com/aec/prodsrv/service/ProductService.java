@@ -399,7 +399,6 @@ public class ProductService {
             throw new SecurityException("No autorizado");
         }
 
-        // 1) Intentar eliminar TODO en Drive primero (con reintentos)
         List<String> targets = new ArrayList<>();
         if (p.getFotografiaProd() != null)
             targets.addAll(p.getFotografiaProd());

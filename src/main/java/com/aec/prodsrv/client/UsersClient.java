@@ -10,7 +10,6 @@ import org.springframework.web.client.RestTemplate;
 
 import java.util.Map;
 import java.util.Optional;
-
 @Slf4j
 @Component
 public class UsersClient {
@@ -24,13 +23,18 @@ public class UsersClient {
         this.rt = rt;
     }
 
+    private String ensureAbsolute(String url) {
+        if (url == null || url.isBlank()) return url;
+        if (url.startsWith("http://") || url.startsWith("https://")) return url;
+        return "http://" + url;
+    }
+
     @SuppressWarnings("unchecked")
     public Optional<String> findEmailByUsername(String username) {
-        // 1) /api/users/{username}
-        String url1 = usersBaseUrl.endsWith("/") ? usersBaseUrl + username : usersBaseUrl + "/" + username;
-        // 2) /api/users/by-username/{username} (por si tu controlador usa esta ruta)
-        String url2 = usersBaseUrl.endsWith("/") ? usersBaseUrl + "by-username/" + username
-                                                 : usersBaseUrl + "/by-username/" + username;
+        String base = ensureAbsolute(usersBaseUrl.trim());
+        String url1 = base.endsWith("/") ? base + username : base + "/" + username;
+        String url2 = base.endsWith("/") ? base + "by-username/" + username
+                                         : base + "/by-username/" + username;
 
         for (String url : new String[]{url1, url2}) {
             try {
