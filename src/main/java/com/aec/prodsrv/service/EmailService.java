@@ -21,8 +21,7 @@ public class EmailService {
     @Autowired
     private JavaMailSender mailSender;
 
-    // Inyecta el correo del administrador desde application.yml/properties
-    @Value("${admin.email")
+    @Value("${admin.email}")
     private String adminEmail;
 
     private void sendHtmlEmail(String toEmail, String subject, String htmlContent) {

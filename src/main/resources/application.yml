@@ -14,9 +14,9 @@ spring:
       mail.smtp.ssl.enable: false
       mail.smtp.ssl.trust: ${MAIL_HOST}
     default-encoding: UTF-8
-
   admin:
     email: ${ADMIN_EMAIL}
+    
   docker:
     compose:
       enabled: false
