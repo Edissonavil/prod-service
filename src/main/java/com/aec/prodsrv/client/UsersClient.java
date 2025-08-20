@@ -12,23 +12,32 @@ import jakarta.annotation.PostConstruct;
 
 import java.util.Map;
 import java.util.Optional;
-@Slf4j@Component
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+@Component
 public class UsersClient {
 
+    private static final Logger log = LoggerFactory.getLogger(UsersClient.class);
+
     private final RestTemplate rt;
+
+    @Value("${users.service.url}")
+    private String usersBaseUrl; // p.ej: http://users-service.railway.internal:8081/api/users
 
     public UsersClient(@Qualifier("usersRestTemplate") RestTemplate rt) {
         this.rt = rt;
     }
 
     @PostConstruct
-    void logBase(@Value("${users.service.url}") String usersBaseUrl) {
-        // Para verificar en logs el root configurado (con puerto 8081)
+    void logBase() { // <- SIN parámetros
         log.info("[UsersClient] users.service.url = {}", usersBaseUrl);
     }
 
     @SuppressWarnings("unchecked")
     public Optional<String> findEmailByUsername(String username) {
+        // Como el RestTemplate tiene rootUri=users.service.url, usamos paths relativos:
         String[] paths = new String[] {
             "/by-username/{username}",
             "/{username}"
@@ -36,7 +45,7 @@ public class UsersClient {
 
         for (String path : paths) {
             try {
-                log.info("[UsersClient] GET (relative) {}", path);
+                log.info("[UsersClient] GET {}", path);
                 ResponseEntity<Map> resp = rt.getForEntity(path, Map.class, username);
                 if (resp.getStatusCode().is2xxSuccessful() && resp.getBody() != null) {
                     Object email = resp.getBody().get("email");
