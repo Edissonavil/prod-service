@@ -8,47 +8,46 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
+import jakarta.annotation.PostConstruct;
+
 import java.util.Map;
 import java.util.Optional;
-@Slf4j
-@Component
+@Slf4j@Component
 public class UsersClient {
 
     private final RestTemplate rt;
-
-    @Value("${users.service.url}")
-    private String usersBaseUrl; // p.ej: http://users-service.railway.internal:8081/api/users
 
     public UsersClient(@Qualifier("usersRestTemplate") RestTemplate rt) {
         this.rt = rt;
     }
 
-    private String ensureAbsolute(String url) {
-        if (url == null || url.isBlank()) return url;
-        if (url.startsWith("http://") || url.startsWith("https://")) return url;
-        return "http://" + url;
+    @PostConstruct
+    void logBase(@Value("${users.service.url}") String usersBaseUrl) {
+        // Para verificar en logs el root configurado (con puerto 8081)
+        log.info("[UsersClient] users.service.url = {}", usersBaseUrl);
     }
 
     @SuppressWarnings("unchecked")
     public Optional<String> findEmailByUsername(String username) {
-        String base = ensureAbsolute(usersBaseUrl.trim());
-        String url1 = base.endsWith("/") ? base + username : base + "/" + username;
-        String url2 = base.endsWith("/") ? base + "by-username/" + username
-                                         : base + "/by-username/" + username;
+        String[] paths = new String[] {
+            "/by-username/{username}",
+            "/{username}"
+        };
 
-        for (String url : new String[]{url1, url2}) {
+        for (String path : paths) {
             try {
-                log.info("[UsersClient] GET {}", url);
-                ResponseEntity<Map> resp = rt.getForEntity(url, Map.class);
+                log.info("[UsersClient] GET (relative) {}", path);
+                ResponseEntity<Map> resp = rt.getForEntity(path, Map.class, username);
                 if (resp.getStatusCode().is2xxSuccessful() && resp.getBody() != null) {
                     Object email = resp.getBody().get("email");
-                    log.info("[UsersClient] Resuelto email='{}' para username='{}' vía {}", email, username, url);
+                    log.info("[UsersClient] Resuelto email='{}' para username='{}' vía {}",
+                             email, username, path);
                     return Optional.ofNullable(email != null ? email.toString() : null);
                 } else {
-                    log.warn("[UsersClient] Respuesta no OK {}: {}", url, resp.getStatusCode());
+                    log.warn("[UsersClient] Respuesta no OK {}: {}", path, resp.getStatusCode());
                 }
             } catch (Exception e) {
-                log.warn("[UsersClient] Falló {} -> {}", url, e.toString());
+                log.warn("[UsersClient] Falló {} -> {}", path, e.toString());
             }
         }
         log.warn("[UsersClient] No se pudo resolver email para '{}'", username);
