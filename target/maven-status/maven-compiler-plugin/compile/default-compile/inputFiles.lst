@@ -1,10 +1,13 @@
 /home/tesis/productosaec/individual_services/prod-service/src/main/java/com/aec/prodsrv/ProdServiceApplication.java
 /home/tesis/productosaec/individual_services/prod-service/src/main/java/com/aec/prodsrv/client/FileClient.java
+/home/tesis/productosaec/individual_services/prod-service/src/main/java/com/aec/prodsrv/client/UsersClient.java
+/home/tesis/productosaec/individual_services/prod-service/src/main/java/com/aec/prodsrv/client/WebClientUtils.java
+/home/tesis/productosaec/individual_services/prod-service/src/main/java/com/aec/prodsrv/client/dto/FileInfoDto.java
 /home/tesis/productosaec/individual_services/prod-service/src/main/java/com/aec/prodsrv/config/AppConfig.java
-/home/tesis/productosaec/individual_services/prod-service/src/main/java/com/aec/prodsrv/config/CorsConfig.java
 /home/tesis/productosaec/individual_services/prod-service/src/main/java/com/aec/prodsrv/config/SecurityConfig.java
 /home/tesis/productosaec/individual_services/prod-service/src/main/java/com/aec/prodsrv/controller/ProductController.java
 /home/tesis/productosaec/individual_services/prod-service/src/main/java/com/aec/prodsrv/dto/AdminDecisionDto.java
+/home/tesis/productosaec/individual_services/prod-service/src/main/java/com/aec/prodsrv/dto/FileInfoResponse.java
 /home/tesis/productosaec/individual_services/prod-service/src/main/java/com/aec/prodsrv/dto/ProductDto.java
 /home/tesis/productosaec/individual_services/prod-service/src/main/java/com/aec/prodsrv/dto/StoredFileDto.java
 /home/tesis/productosaec/individual_services/prod-service/src/main/java/com/aec/prodsrv/model/Category.java
@@ -15,4 +18,6 @@
 /home/tesis/productosaec/individual_services/prod-service/src/main/java/com/aec/prodsrv/security/CustomUserDetailsService.java
 /home/tesis/productosaec/individual_services/prod-service/src/main/java/com/aec/prodsrv/security/JwtAuthenticationFilter.java
 /home/tesis/productosaec/individual_services/prod-service/src/main/java/com/aec/prodsrv/security/JwtUtils.java
+/home/tesis/productosaec/individual_services/prod-service/src/main/java/com/aec/prodsrv/service/EmailService.java
 /home/tesis/productosaec/individual_services/prod-service/src/main/java/com/aec/prodsrv/service/ProductService.java
+/home/tesis/productosaec/individual_services/prod-service/src/main/java/com/aec/prodsrv/util/StringListConverter.java

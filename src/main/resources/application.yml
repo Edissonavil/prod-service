@@ -56,14 +56,14 @@ jwt:
   refreshMs: ${JWT_REFRESH_MS:86400000}
 
 file-service:
-  base-url: ${FILE_SERVICE_BASE_URL:http://file-service.railway.internal:8084}
+  base-url: ${FILE_SERVICE_BASE_URL}
 
 gateway:
-  public-base-url: ${GATEWAY_PUBLIC_BASE_URL:https://gateway-production-129e.up.railway.app}
+  public-base-url: ${GATEWAY_PUBLIC_BASE_URL}
 
 users:
   service:
-    url: ${USER_SERVICE_URL:http://users-service.railway.internal:8081/api/users}
+    url: ${USER_SERVICE_URL}
 
 file:
   upload-dir: ${UPLOAD_DIR:/app/uploads}
