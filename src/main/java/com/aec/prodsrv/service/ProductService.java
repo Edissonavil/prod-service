@@ -100,7 +100,6 @@ public class ProductService {
             p.setFotografiaProd(fotos.isEmpty() ? null : new ArrayList<>(fotos));
             p.setArchivosAut(aut.isEmpty() ? null : new ArrayList<>(aut));
         } else {
-            // RECHAZADO → descartar staging (nunca llegó a BDD/Drive)
             try {
                 fileClient.discardStaging(p.getIdProducto());
             } catch (Exception e) {
@@ -113,7 +112,6 @@ public class ProductService {
 
         Product saved = repo.save(p);
 
-        // === EMAIL AL COLABORADOR ===
         try {
             String uploaderUsername = saved.getUploaderUsername();
             var emailOpt = usersClient.findEmailByUsername(uploaderUsername);
@@ -313,9 +311,6 @@ public class ProductService {
 
         boolean esAprobado = p.getEstado() == ProductStatus.APROBADO;
 
-        // --------------------------
-        // FOTOS (mantener / borrar / subir) -> PERMITIDO SIEMPRE
-        // --------------------------
         List<String> existingFotoIds = (p.getFotografiaProd() != null)
                 ? new ArrayList<>(p.getFotografiaProd())
                 : new ArrayList<>();
@@ -324,7 +319,6 @@ public class ProductService {
                 ? new ArrayList<>(keepFotoIds)
                 : new ArrayList<>(existingFotoIds); // si no envían keep, conservamos
 
-        // Borrar las que ya no están en keep
         for (String oldId : existingFotoIds) {
             if (!keepIds.contains(oldId)) {
                 try {
@@ -419,7 +413,6 @@ public class ProductService {
         p.setPrecioIndividual(dto.getPrecioIndividual());
 
         if (!esAprobado) {
-            // Solo si NO está aprobado, permitimos cambiar pais/categorías/especialidades
             p.setPais(dto.getPais());
             if (dto.getCategorias() != null) {
                 p.setCategorias(namesToCategorySet(dto.getCategorias()));
@@ -448,37 +441,41 @@ public class ProductService {
             throw new SecurityException("No autorizado");
         }
 
-        List<String> targets = new ArrayList<>();
-        if (p.getFotografiaProd() != null)
-            targets.addAll(p.getFotografiaProd());
-        if (p.getArchivosAut() != null)
-            targets.addAll(p.getArchivosAut());
-
-        List<String> fallos = new ArrayList<>();
-        for (String fid : targets) {
-            if (fid == null || fid.isBlank())
-                continue;
-            boolean ok = deleteWithRetry(fid, 3, 150); // 3 intentos, 150 ms backoff base
-            if (!ok) {
-                fallos.add(fid);
-            }
-        }
-
-        if (!fallos.isEmpty()) {
-            // Abortamos para que NO se borre en BD: todo o nada
+        // 1) Borrar CARPETA del producto en Drive (recursivo) vía file-service
+        boolean folderOk = deleteFolderWithRetry(p.getIdProducto(), 3, 150);
+        if (!folderOk) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_GATEWAY,
-                    "No se pudieron eliminar en Drive los siguientes archivos: " + String.join(", ", fallos));
+                    "No se pudo eliminar la carpeta del producto en Drive (tras reintentos)");
         }
 
         // 2) Si TODO salió bien en Drive, recién borramos en BD
         repo.delete(p);
     }
 
-    /**
-     * Reintenta la eliminación en Drive con backoff lineal simple.
-     * true = eliminado, false = falló tras agotar reintentos.
-     */
+    /** Reintenta la eliminación de la carpeta del producto en Drive. */
+    private boolean deleteFolderWithRetry(Long productId, int maxAttempts, long backoffMillis) {
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                fileClient.deleteProductFolder(productId);
+                return true;
+            } catch (Exception e) {
+                if (attempt == maxAttempts) {
+                    log.warn("Fallo al eliminar carpeta de producto {} tras {} intentos: {}",
+                            productId, maxAttempts, e.getMessage());
+                    return false;
+                }
+                try {
+                    Thread.sleep(backoffMillis * attempt);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    return false;
+                }
+            }
+        }
+        return false;
+    }
+
     private boolean deleteWithRetry(String driveFileId, int maxAttempts, long backoffMillis) {
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
             try {
@@ -564,13 +561,12 @@ public class ProductService {
                 : List.of();
 
         // 3) Consultar metadatos una sola vez (sirven para formatos y para fallback de
-        // fotos)
+
         List<String> formatos = List.of();
         List<String> imageIdsFromMeta = List.of();
         try {
             var metas = fileClient.getMetaByProduct(p.getIdProducto());
             if (metas != null && !metas.isEmpty()) {
-                // Formatos (no imágenes)
                 formatos = metas.stream()
                         .filter(m -> m.getFileType() == null || !m.getFileType().startsWith("image/"))
                         .map(m -> onlyExt(m.getOriginalName()))
@@ -578,7 +574,6 @@ public class ProductService {
                         .distinct()
                         .toList();
 
-                // Recoger posibles imágenes desde meta (para fallback)
                 imageIdsFromMeta = metas.stream()
                         .filter(m -> m.getFileType() != null && m.getFileType().startsWith("image/"))
                         .map(m -> m.getDriveFileId())
@@ -594,12 +589,9 @@ public class ProductService {
         }
 
         // 4) Fallback de fotos: si fotografiaProd está vacío, usar las imágenes
-        // detectadas por metadatos
         List<String> fotografiaProdForDto = (p.getFotografiaProd() != null) ? p.getFotografiaProd() : List.of();
         if ((fotografiaProdForDto == null || fotografiaProdForDto.isEmpty()) && !imageIdsFromMeta.isEmpty()) {
-            // rellenamos en el DTO (no tocamos la entidad ni BD)
             fotografiaProdForDto = imageIdsFromMeta;
-            // y construimos sus URLs
             if (fotoUrls.isEmpty()) {
                 fotoUrls = imageIdsFromMeta.stream()
                         .map(id -> gatewayBaseUrl + "/api/files/" + p.getIdProducto() + "/" + id)
@@ -612,7 +604,6 @@ public class ProductService {
                 .nombre(p.getNombre())
                 .descripcionProd(p.getDescripcionProd())
                 .precioIndividual(p.getPrecioIndividual())
-                // Importante: mandamos la lista de IDs (sea la original o la de fallback)
                 .fotografiaProd(fotografiaProdForDto)
                 .fotografiaUrl(fotoUrls)
                 .archivosAut(p.getArchivosAut())

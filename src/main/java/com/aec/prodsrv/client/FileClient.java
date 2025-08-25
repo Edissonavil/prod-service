@@ -139,6 +139,16 @@ public class FileClient {
                 .block();
     }
 
+    public void deleteProductFolder(Long productId) {
+        String token = getAuthToken();
+        webClient.delete()
+                .uri("/api/files/product/{productId}/folder", productId)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .retrieve()
+                .toBodilessEntity()
+                .block();
+    }
+
     public byte[] downloadFile(String driveFileId) {
         return webClient.get()
                 .uri("/api/files/{driveId}", driveFileId)
