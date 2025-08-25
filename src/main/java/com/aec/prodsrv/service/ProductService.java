@@ -74,6 +74,43 @@ public class ProductService {
         p.setUsuarioDecision(adminUsername);
         p.setComentario(comentario);
 
+        // Aplicamos decisión primero en memoria
+        if (aprobar) {
+            // PROMOVER staging -> Drive + BDD (solo ahora se escriben StoredFile y se
+            // obtienen driveFileId)
+            List<FileInfoDto> permanentes = List.of();
+            try {
+                permanentes = fileClient.promoteStaging(p.getIdProducto());
+            } catch (Exception e) {
+                log.error("[DECIDIR] Promoción de staging falló: {}", e.getMessage(), e);
+                throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "No se pudo promover archivos a permanente");
+            }
+
+            // Separa imágenes de no-imágenes
+            List<String> fotos = permanentes.stream()
+                    .filter(f -> f.getFileType() != null && f.getFileType().startsWith("image/"))
+                    .map(FileInfoDto::getDriveFileId)
+                    .toList();
+
+            List<String> aut = permanentes.stream()
+                    .filter(f -> f.getFileType() == null || !f.getFileType().startsWith("image/"))
+                    .map(FileInfoDto::getDriveFileId)
+                    .toList();
+
+            p.setFotografiaProd(fotos.isEmpty() ? null : new ArrayList<>(fotos));
+            p.setArchivosAut(aut.isEmpty() ? null : new ArrayList<>(aut));
+        } else {
+            // RECHAZADO → descartar staging (nunca llegó a BDD/Drive)
+            try {
+                fileClient.discardStaging(p.getIdProducto());
+            } catch (Exception e) {
+                log.warn("[DECIDIR] Fallo descartando staging de producto {}: {}", id, e.toString());
+            }
+            // Asegura no dejar restos
+            p.setFotografiaProd(null);
+            p.setArchivosAut(null);
+        }
+
         Product saved = repo.save(p);
 
         // === EMAIL AL COLABORADOR ===
@@ -260,6 +297,18 @@ public class ProductService {
 
         if (!Objects.equals(p.getUploaderUsername(), uploader)) {
             throw new SecurityException("Sin permiso");
+        }
+
+        boolean esPendiente = p.getEstado() == ProductStatus.PENDIENTE;
+        if (esPendiente) {
+            if (fotos != null)
+                for (var f : fotos)
+                    fileClient.uploadToStaging(f, id);
+            if (foto != null && !foto.isEmpty())
+                fileClient.uploadToStaging(foto, id);
+            if (archivosAut != null)
+                for (var mf : archivosAut)
+                    fileClient.uploadToStaging(mf, id);
         }
 
         boolean esAprobado = p.getEstado() == ProductStatus.APROBADO;

@@ -76,6 +76,4 @@ http:
 logging:
   level:
     root: INFO
-    org.springframework: INFO
-    org.hibernate: INFO
-    com.aec.prodsrv: DEBUG
+    org.springframework: WARN

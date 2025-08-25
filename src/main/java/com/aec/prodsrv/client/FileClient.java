@@ -4,11 +4,14 @@ import com.aec.prodsrv.client.dto.FileInfoDto;
 import com.aec.prodsrv.security.JwtAuthenticationFilter.CustomWebAuthenticationDetails;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
+import lombok.Data;
 import reactor.core.publisher.Mono;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ByteArrayResource;
+import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
@@ -23,6 +26,8 @@ import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.UncheckedIOException;
 import java.util.List;
 
 @Component
@@ -133,7 +138,6 @@ public class FileClient {
                 .toBodilessEntity()
                 .block();
     }
-    
 
     public byte[] downloadFile(String driveFileId) {
         return webClient.get()
@@ -184,6 +188,92 @@ public class FileClient {
                     return Mono.just(List.of());
                 })
                 .block();
+    }
+
+    // en FileClient: añade helpers para STAGING
+
+    public StagingInfoDto uploadToStaging(MultipartFile file, Long productId) {
+        if (file == null || file.isEmpty())
+            return null;
+
+        String token = getAuthToken();
+        return webClient.post()
+                .uri(uriBuilder -> uriBuilder.path("/api/files/staging/{pid}").build(productId))
+                .contentType(MediaType.MULTIPART_FORM_DATA)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .body(BodyInserters.fromMultipartData(buildStreamingForm(file)))
+                .retrieve()
+                .bodyToMono(StagingInfoDto.class)
+                .block();
+    }
+
+    public List<StagingInfoDto> listStaging(Long productId) {
+        String token = getAuthTokenOrNull();
+        WebClient.RequestHeadersSpec<?> req = webClient.get().uri("/api/files/staging/{pid}", productId);
+        if (token != null)
+            req = req.header(HttpHeaders.AUTHORIZATION, "Bearer " + token);
+        return req.retrieve().bodyToFlux(StagingInfoDto.class).collectList().block();
+    }
+
+    public List<FileInfoDto> promoteStaging(Long productId) {
+        String token = getAuthToken();
+        return webClient.post()
+                .uri("/api/files/staging/{pid}/promote", productId)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .retrieve()
+                .bodyToFlux(FileInfoDto.class)
+                .collectList()
+                .block();
+    }
+
+    public void discardStaging(Long productId) {
+        String token = getAuthToken();
+        webClient.delete()
+                .uri("/api/files/staging/{pid}", productId)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .retrieve()
+                .toBodilessEntity()
+                .block();
+    }
+
+    private MultiValueMap<String, Object> buildStreamingForm(MultipartFile file) {
+        var map = new LinkedMultiValueMap<String, Object>();
+        // NO leer bytes a memoria: usa InputStreamResource
+        InputStreamResource resource = new InputStreamResource(io(file)) {
+            @Override
+            public String getFilename() {
+                return file.getOriginalFilename();
+            }
+
+            @Override
+            public long contentLength() {
+                try {
+                    return file.getSize();
+                } catch (Exception e) {
+                    return -1;
+                }
+            }
+        };
+        map.add("file", resource);
+        return map;
+    }
+
+    private InputStream io(MultipartFile f) {
+        try {
+            return f.getInputStream();
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    // DTO de staging (mismo shape que en file-service)
+    @Data
+    public static class StagingInfoDto {
+        private String stagingId;
+        private String filename;
+        private String contentType;
+        private long size;
+        private String previewUri;
     }
 
 }
