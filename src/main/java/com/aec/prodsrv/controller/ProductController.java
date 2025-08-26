@@ -116,9 +116,9 @@ public class ProductController {
         return (estado != null) ? svc.findByEstado(estado, pg) : svc.findAll(pg);
     }
 
-    @GetMapping("/{id}")
-    public ProductDto byId(@PathVariable Long id) {
-        return svc.getById(id); // si no existe lanza EntityNotFoundException
+     @GetMapping("/{id}")
+    public ResponseEntity<ProductDto> byId(@PathVariable Long id) {
+        return ResponseEntity.ok(svc.getById(id));
     }
 
     @GetMapping("/pending")
