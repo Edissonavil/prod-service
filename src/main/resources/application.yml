@@ -35,11 +35,10 @@ spring:
   jpa:
     hibernate:
       ddl-auto: ${DDL_AUTO:update}
-    show-sql: true
+    show-sql: false
     properties:
       hibernate:
-        dialect: org.hibernate.dialect.PostgreSQLDialect
-        format_sql: true
+        format_sql: false
         jdbc:
           batch_size: 20
         order_inserts: true
@@ -77,3 +76,5 @@ logging:
   level:
     root: INFO
     org.springframework: WARN
+    org.hibernate.SQL: WARN
+    org.hibernate.type.descriptor.sql: ERROR
